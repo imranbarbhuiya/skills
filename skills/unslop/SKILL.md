@@ -18,11 +18,11 @@ Do not fabricate type evidence. Do not over-build. Do not leave leftovers. This 
 ## Workflow
 
 1. Detect the stack (`package.json`, `nest-cli.json`, `app.json`, `expo`, `@tanstack/*`). Use that project's package manager, tokens (`global.css`, theme, CSS variables), and typecheck command.
-2. Scope: named files, or unstaged/untracked work. Whole-repo only if asked. Never edit staged files unless asked. Never edit generated output (`openapi/`, `*.gen.ts`, Prisma client, route types, lockfiles).
+2. Scope: named files, or unstaged/untracked work. If the tree is clean and no files were named, ask for a scope; do not sweep the repo. Whole-repo only if asked. Never edit staged files unless asked. Never edit generated output (`openapi/`, `*.gen.ts`, Prisma client, route types, lockfiles).
 3. Fix only real slop: fabricated types, copy-paste, token-less colors, heavy validation, pointless splits, dead code. Do not restyle or reorganize for taste.
 4. Prefer the smallest real contract. If a value is already known, do not add recursive guards "for TypeScript."
 5. Typecheck what you touched. Do not run the full test suite unless shared primitives / `utils/` changed, or the user asked.
-6. Explain in the conversation. Do not write a summary document.
+6. Explain in the conversation. If a fix is risky or you cannot prove it safe, report it instead of applying it. Do not write a summary document.
 
 ## Hard constraints
 
@@ -49,6 +49,7 @@ Treat these as errors in **application** code. Generated files and third-party `
 | `Reflect.apply` / `Reflect.get` | Typed call or parsed property |
 | Ad hoc `typeof` mid-feature | Schema / DTO at the edge. `typeof` is fine **inside** a type predicate |
 | `({ ... }) satisfies Partial<T> as T` | `z.input` empty values + `useForm<Input, unknown, Output>` or a typed factory |
+| `@ts-ignore` / broad `eslint-disable` over a fixable error | Fix the cause. `@ts-expect-error` only at a real boundary |
 
 `any` in production is always in scope.
 
@@ -83,7 +84,7 @@ Parse untrusted input once at the boundary (HTTP body, `searchParams`, `JSON.par
 
 Reject recursive tree-walks, duplicate Zod schemas for the same payload, `superRefine` that repeats `.min()`, and field-by-field `typeof` after a schema already ran.
 
-If the caller already passed a branded ID or form `z.output`, do not re-validate it as `unknown`.
+If the caller already passed a branded ID or form `z.output`, do not re-validate it as `unknown`. Same for `?.` and `?? fallback` on values the types already guarantee — defensive chaining is validation slop.
 
 ## Splitting
 
@@ -106,17 +107,19 @@ Delete what the compiler and the product no longer use:
 
 - Unused imports, variables, exports, props, state, effects, query results
 - Commented-out code, `TODO` that is already done, `FIXME` with a working path beside it
+- Stray debug `console.log`, comments that only restate the line below them
 - Always-true / always-false flags, dead branches, old and new implementations kept "just in case"
 - Deprecated wrappers that only call the new function
 - Unreachable defaults after a union is already exhaustive
 
-Do not delete a public API, a fixture, or something only referenced from native / tests / generated routes without checking.
+Before deleting an export, search the repo for the identifier — tests, native code, and string references (DI tokens, route names, dynamic keys) count, not just TS imports. Public APIs and fixtures stay unless proven dead.
 
 ## Other over-engineering
 
 - Config objects for two options. Pass the two args.
 - Boolean soup (`isCompactDenseAlt`). Two call sites or a variant union.
 - Try/catch that only rethrows. Empty `catch {}`.
+- `return Promise.resolve(x)` inside `async`, `new Promise` wrapping an existing promise, `await` on a non-promise.
 - Extra context/provider for a value used in one tree.
 - Pass-through components that add no markup, state, or behavior.
 - Abstractions for a hypothetical third use. YAGNI.
@@ -138,6 +141,6 @@ Use the repo's existing validation, tokens, and error types. Do not invent a new
 
 - Touched files have no new chained assertions, `any` contracts, copy-pasted helpers, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
 - Typecheck passes for those files (ignore failures in files you were told not to touch).
-- The diff is smaller than the clever version. If a workaround needs a long explanation, find a simpler one.
+- The diff is smaller than the clever version.
 
 Concrete snippets: [examples.md](examples.md).

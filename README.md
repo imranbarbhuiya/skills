@@ -1,6 +1,6 @@
 # unslop
 
-Agent skill that removes low-evidence TypeScript, over-engineering, duplication, dead leftovers, and hardcoded theme values — without installing [anti-slop](https://github.com/dmmulroy/anti-slop).
+Agent skill that removes low-evidence TypeScript, over-engineering, duplication, dead leftovers, and hardcoded theme values.
 
 Parse at the boundary. Keep known types known. Inline one-use wrappers. Use design tokens. Delete leftovers.
 
@@ -60,3 +60,5 @@ This is the catalog layout the skills CLI discovers under `skills/`.
 ## License
 
 MIT
+
+Type evidence rules follow [dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop).

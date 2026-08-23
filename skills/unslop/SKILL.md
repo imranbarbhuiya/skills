@@ -11,7 +11,7 @@ disable-model-invocation: true
 
 # Unslop
 
-Opinionated pass for TypeScript and JavaScript apps. Inspired by [dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop), but this skill is not a linter install: do not add the anti-slop package, Oxlint plugin, or vendor its `src/`.
+Opinionated pass for TypeScript and JavaScript apps. This is not a linter install: do not add Oxlint plugins or vendor extra lint rules for this pass.
 
 Do not fabricate type evidence. Do not over-build. Do not leave leftovers. This is a surgical cleanup, not a rewrite. Leave valid current code alone.
 

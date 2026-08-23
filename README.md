@@ -1,8 +1,8 @@
 # unslop
 
-Agent skill that removes low-evidence TypeScript and JavaScript patterns.
+Agent skill that removes low-evidence TypeScript, over-engineering, duplication, dead leftovers, and hardcoded theme values — without installing [anti-slop](https://github.com/dmmulroy/anti-slop).
 
-Parse at the boundary. Keep known types known. Do not fabricate evidence with `as unknown as T`.
+Parse at the boundary. Keep known types known. Inline one-use wrappers. Use design tokens. Delete leftovers.
 
 Works with NestJS, Next.js, TanStack, Expo, React Native, and similar TypeScript apps.
 
@@ -20,12 +20,6 @@ List first:
 
 ```bash
 npx skills add imranbarbhuiya/unslop --list
-```
-
-Install globally (all projects):
-
-```bash
-npx skills add imranbarbhuiya/unslop -g
 ```
 
 Install only this skill, skip prompts:
@@ -49,7 +43,7 @@ npx skills add https://github.com/imranbarbhuiya/unslop/tree/main/skills/unslop
 
 ## After install
 
-Invoke it explicitly: `/unslop`, or ask the agent to unslop / anti-slop / tighten types.
+Invoke it explicitly: `/unslop`, or ask the agent to unslop, tighten types, inline splits, or remove dead code.
 
 It will not rewrite valid code, generated OpenAPI, or staged files unless you say so.
 

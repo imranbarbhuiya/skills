@@ -15,60 +15,71 @@ const timeout: ReturnType<typeof setTimeout> = setTimeout(fn, 0);
 ## Satisfy then assert
 
 ```ts
-const emptyFest = () =>
-	({ name: '', brands: [] }) satisfies Partial<FestValues> as unknown as FestValues;
+const empty = () =>
+	({ name: '' }) satisfies Partial<FormValues> as unknown as FormValues;
 ```
 
 ```ts
 type FormInput = z.input<typeof schema>;
-type FestInput = FormInput['fests'][number];
-
-const emptyFest = (): FestInput => ({
-	name: '',
-	eventTypes: [],
-	venuePhotos: [],
-	brands: [],
-	socialHandle: '',
-});
+const empty = (): FormInput => ({ name: '' });
 ```
 
-## Widen then assert
+## Copy-pasted helper
+
+Same `mapStatus` in three screens → one `utils/status.ts` (or the repo's existing mapper). Do not add `lib/helpers/status-utils.ts` if `utils/` already exists.
+
+## One-use split (inline)
 
 ```ts
-const stored: unknown = user;
-return stored as User;
+const isLoading = loading;
+const handlePress = () => onPress();
 ```
 
 ```ts
-return user;
+<Button disabled={loading} onPress={onPress} />
 ```
 
-## Known-value widening
+## Hardcoded color
+
+```tsx
+<IconCrossMedium color="#737373" />
+<View style={{ backgroundColor: '#111' }} />
+```
+
+```tsx
+const secondaryText = useCSSVariable('--color-secondary-text');
+<IconCrossMedium color={secondaryText} />
+<View className="bg-background" />
+```
+
+Use the repo's tokens (`global.css`, Tailwind theme, `var(--*)`). Do not invent a parallel palette.
+
+## Heavy validation
 
 ```ts
-const handlers: Record<string, Handler> = { start: startHandler };
+function isDeepForm(value: unknown): value is FormState {
+	return isRecord(value) && everyFieldRecursively(value);
+}
 ```
 
 ```ts
-const handlers = { start: startHandler } satisfies Record<string, Handler>;
+const parsed = JSON.parse(raw);
+const form = isRecord(parsed) ? parsed : {};
 ```
 
-## Ad hoc typeof vs predicate
+Then check individual fields where they are used. Do not walk a tree the screen already owns.
 
-Reject mid-feature:
+## Dead leftover
 
 ```ts
-if (typeof payload.name === 'string') save(payload.name);
+const [draft, setDraft] = useState(value);
+useEffect(() => setDraft(value), [value]);
+export const oldFormatDate = formatDate;
 ```
-
-Allow at the boundary:
 
 ```ts
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-	typeof value === 'object' && value !== null && !Array.isArray(value);
+// use `value` directly; delete `oldFormatDate` if nothing imports it
 ```
-
-Keep field checks next to the code that uses those fields. Do not recurse the whole tree.
 
 ## Native mutable clone (keep)
 
@@ -76,7 +87,7 @@ Keep field checks next to the code that uses those fields. Do not recurse the wh
 <SegmentedControl values={[...values]} />
 ```
 
-Expo wants `string[]`. Cloning also stops the native control mutating the caller's array. Do not replace this with `as string[]`.
+Not a cast. Keep it when the native API wants a mutable `string[]`.
 
 ## Leave generated mismatch
 
@@ -84,4 +95,4 @@ Expo wants `string[]`. Cloning also stops the native control mutating the caller
 return res.data as unknown as ILead[];
 ```
 
-If `openapi/*.ts` is wrong, report it. Do not pile more casts into app code, and do not edit the generated file by hand.
+If the OpenAPI spec is wrong, report it. Do not edit generated files by hand.

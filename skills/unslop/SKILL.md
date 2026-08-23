@@ -1,102 +1,143 @@
 ---
 name: unslop
 description: >-
-  Removes low-evidence TypeScript and JavaScript patterns without installing
-  anti-slop. Rejects chained assertions, widen-then-assert, unknown/any/object
-  contracts, and unsafe dictionaries. Use when the user says unslop, anti-slop,
-  tighten types, kill type slop, or scan TS/JS for fabricated evidence. Works
-  across NestJS, Next.js, TanStack, Expo, React Native, and similar TypeScript
-  apps.
+  Removes low-evidence TypeScript, over-engineering, duplication, dead leftovers,
+  hardcoded theme values, and heavy validation. Use when the user says unslop,
+  anti-slop, tighten types, kill slop, simplify, inline this, or scan for
+  fabricated evidence, copy-pasted helpers, unused code, or token-less colors.
+  Works across NestJS, Next.js, TanStack, Expo, React Native, and similar apps.
 disable-model-invocation: true
 ---
 
 # Unslop
 
-Opinionated pass for TypeScript and JavaScript that follows [dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop): do not fabricate type evidence. Parse untrusted input at the boundary. Keep known types known. Do not install the anti-slop package, Oxlint plugin, or vendor its `src/`.
+Opinionated pass for TypeScript and JavaScript apps. Inspired by [dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop), but this skill is not a linter install: do not add the anti-slop package, Oxlint plugin, or vendor its `src/`.
 
-This is a surgical cleanup, not a rewrite. Leave valid current code alone.
+Do not fabricate type evidence. Do not over-build. Do not leave leftovers. This is a surgical cleanup, not a rewrite. Leave valid current code alone.
 
 ## Workflow
 
-1. Detect the stack from the repo (`package.json`, `nest-cli.json`, `app.json`, `expo`, `@tanstack/*`). Follow that project's package manager and typecheck command.
-2. Scope:
-   - Default: unstaged and untracked source the user is working on, or files they named.
-   - Whole-repo scan only if they asked.
-   - Never edit staged files unless they explicitly said to.
-   - Never edit generated output (`openapi/`, `*.gen.ts`, Prisma client, route types, lockfiles).
-3. Search for the patterns below. Fix only places that fabricate evidence or hide a weak contract.
-4. Prefer the smallest real type over a heavy runtime validator. If the value is already known (form state, OpenAPI field, branded ID the caller passed), do not add recursive guards "for TypeScript."
-5. Run the project's typecheck. Do not run the full test suite unless the change is in shared primitives or `utils/` (or the user asked).
-6. Do not write a summary document. Explain the pass in the conversation only.
+1. Detect the stack (`package.json`, `nest-cli.json`, `app.json`, `expo`, `@tanstack/*`). Use that project's package manager, tokens (`global.css`, theme, CSS variables), and typecheck command.
+2. Scope: named files, or unstaged/untracked work. Whole-repo only if asked. Never edit staged files unless asked. Never edit generated output (`openapi/`, `*.gen.ts`, Prisma client, route types, lockfiles).
+3. Fix only real slop: fabricated types, copy-paste, token-less colors, heavy validation, pointless splits, dead code. Do not restyle or reorganize for taste.
+4. Prefer the smallest real contract. If a value is already known, do not add recursive guards "for TypeScript."
+5. Typecheck what you touched. Do not run the full test suite unless shared primitives / `utils/` changed, or the user asked.
+6. Explain in the conversation. Do not write a summary document.
 
 ## Hard constraints
 
-- Do not add comments, including `SAFETY:` comments. If an assertion still needs a paragraph of justification, the assertion is the wrong fix.
+- Do not add comments, including `SAFETY:` comments. If a workaround needs a paragraph, it is the wrong workaround.
 - Do not add blank lines between JSX siblings or between a parent and its children.
 - Do not introduce dynamic `import()` inside a component. Imports stay at the top of the file.
 - Do not "fix" import order, className order, or indentation.
 - Do not mass-rename `*Shape` types.
-- Do not rewrite existing Jest/Vitest `jest.mock` / `vi.mock` unless asked.
-- Do not chase every `{...(cond ? { x } : {})}` spread. Leave it unless it is hiding a typing lie.
+- Do not rewrite existing Jest/Vitest mocks unless asked.
+- Do not chase every `{...(cond ? { x } : {})}` spread unless it is hiding a typing lie.
+- Do not extract a helper that is used once. Do not inline a shared helper that is already the project convention.
 
-## What to reject
+## Types
 
 Treat these as errors in **application** code. Generated files and third-party `.d.ts` are out of scope.
 
-| Pattern | Reject | Prefer |
-| --- | --- | --- |
-| Chained assertions | `as X as Y`, `as unknown as T` | Parse, narrow, or a single justified boundary assertion |
-| Widen then assert | annotate as `unknown` / `any` / `object`, then `as T` | Keep the original type through the flow |
-| Known-value widening | `const m: Record<string, T> = { start: fn }` | Infer, `satisfies`, or a const map |
-| `object` parameters | `fn(value: object)` | A real type or generic |
-| `unknown` / `any` in app contracts | `fn(input: unknown): unknown`, `type Foo = unknown` | Typed input/output. `unknown` belongs at a parse boundary, then disappears |
-| Unsafe dictionaries | `Record<string, any \| unknown \| object \| {}>` | `Record<K, Specific>` or a named type |
-| `Reflect.apply` / `Reflect.get` | dynamic call/get | Typed call or parsed property |
-| Ad hoc `typeof` in business logic | `if (typeof x === 'string')` mid-feature | Schema / DTO parse at the edge. `typeof` is fine **inside** a type predicate |
-| Satisfy-then-assert | `({ ... }) satisfies Partial<T> as T` | `z.input` empty values + `useForm<Input, unknown, Output>` or a typed factory |
+| Reject | Prefer |
+| --- | --- |
+| `as X as Y`, `as unknown as T` | Parse, narrow, or one real boundary type |
+| Widen to `unknown` / `any` / `object`, then `as T` | Keep the original type through the flow |
+| `const m: Record<string, T> = { start: fn }` | Infer, `satisfies`, or a const map |
+| `fn(value: object)` / `Record<string, any \| unknown \| object>` | A named type or generic |
+| `fn(input: unknown): unknown`, `type Foo = unknown` | Typed contracts. `unknown` only at JSON / `catch` / untyped lib, then disappear |
+| `Reflect.apply` / `Reflect.get` | Typed call or parsed property |
+| Ad hoc `typeof` mid-feature | Schema / DTO at the edge. `typeof` is fine **inside** a type predicate |
+| `({ ... }) satisfies Partial<T> as T` | `z.input` empty values + `useForm<Input, unknown, Output>` or a typed factory |
 
-`any` in production is always in scope. `unknown` is only for the first line after JSON, `catch`, or an untyped library, and must be narrowed before use.
-
-## What to leave
-
-- Generated OpenAPI / Prisma mismatches. Do not double-cast to paper over a bad schema; leave a short note in chat if the generator is the real bug.
-- Library generics that require `unknown` as a slot (`useForm<TField, unknown, TOutput>`, React Query context).
-- `catch (error)` then a project error helper (`ApiError`, `toUserMessage`). Do not type the catch as `any`.
-- Existing test mocks and optional object spreads, as above.
-- Platform mutations that need a shallow clone (`[...readonlyValues]` for Expo `string[]`) — that is not a cast, keep it.
-
-## Fix recipes
+`any` in production is always in scope.
 
 **Timeout IDs:** `ReturnType<typeof setTimeout>`, never `as unknown as number`.
 
-**JSON / MMKV / `searchParams` / request bodies:** one `isRecord` (or Zod / class-validator / Nest DTO) at the boundary, then field checks where those fields are used. No recursive tree walk of an already-owned form.
+**IDs in `queryFn`:** throw the project's error type, not a raw `new Error`, unless that is the repo convention.
 
-**Zod + RHF:** `type FormInput = z.input<typeof schema>`; `type FormValues = z.output<typeof schema>`; empty rows are `FormInput`. Submit handlers take `FormValues`.
+**Non-null `!`:** guard, or thread `string | undefined` until `enabled: Boolean(id)`.
 
-**IDs in `queryFn`:** if missing, throw the project's error type (`ApiError`, `BadRequestException`, typed `Error` subclass) — not a raw `new Error` unless that is the repo convention.
+Leave: library generic slots (`useForm<TField, unknown, TOutput>`), `catch (error)` into the project error helper, mutable clones for native APIs (`[...values]`), generated OpenAPI mismatches (report in chat; do not edit generated files).
 
-**Non-null `!`:** replace with a guard or by threading `string | undefined` until the call site that already has `enabled: Boolean(id)`.
+## Duplication
 
-**Discriminated unions:** model the variants; do not `as` between them.
+Same non-trivial function, mapper, error throw, or fetch wrapper in two or more files → one shared helper in the place this repo already uses (`utils/`, `lib/`, a module). Do not invent a new folder.
 
-**Sets of known strings:** `Set` + `.has`, not a boolean table plus assertions.
+Do not copy a local helper that already exists. Search before writing `formatDate`, `isRecord`, `toUserMessage`, `getHeaders`, or the equivalent.
+
+Do not "DRY" JSX that is similar but not the same. Two screens sharing a card is a component; two screens sharing a `<View className="gap-3">` is not.
+
+## Tokens, not literals
+
+Hardcoded theme values are slop when the repo already has tokens.
+
+- Colors: no hex / `rgb()` / `rgba()` / named CSS colors in app UI. Use `global.css` variables, Tailwind/Uniwind theme classes (`bg-card`, `text-primary`), or the project's JS token hook (`useCSSVariable('--color-primary')`, `theme.colors`, CSS `var(--*)`).
+- Same for radius, spacing, and font size when tokens exist (`rounded-xl`, `--radius-*`, `--text-2xs`). Do not sprinkle `14`, `#111`, or `borderRadius: 8` next to a tokenized system.
+- Icons and native props that need a string color still go through the token hook, not `'#000'`.
+- One-off brand colors in marketing that are not in the theme: add a token if the design system expects it; do not silently invent a new palette.
+
+## Validation weight
+
+Parse untrusted input once at the boundary (HTTP body, `searchParams`, `JSON.parse`, MMKV, route params). After that, trust the typed value.
+
+Reject recursive tree-walks, duplicate Zod schemas for the same payload, `superRefine` that repeats `.min()`, and field-by-field `typeof` after a schema already ran.
+
+If the caller already passed a branded ID or form `z.output`, do not re-validate it as `unknown`.
+
+## Splitting
+
+Inline when a name adds no information:
+
+- `const isLoading = loading`
+- `const onPress = () => props.onPress()`
+- A 3-line function used once in the same file
+- A new file for a component used once by one parent
+- `useMemo` / `useCallback` around a cheap value or a callback passed to a DOM node
+- Derived state copied into `useState` + `useEffect`
+
+Keep a split when it is a real boundary: a repeated card, a schema module the form already uses, a hook with its own state/subscriptions.
+
+Prefer one 40-line function over four 8-line functions that only exist to call each other.
+
+## Dead leftovers
+
+Delete what the compiler and the product no longer use:
+
+- Unused imports, variables, exports, props, state, effects, query results
+- Commented-out code, `TODO` that is already done, `FIXME` with a working path beside it
+- Always-true / always-false flags, dead branches, old and new implementations kept "just in case"
+- Deprecated wrappers that only call the new function
+- Unreachable defaults after a union is already exhaustive
+
+Do not delete a public API, a fixture, or something only referenced from native / tests / generated routes without checking.
+
+## Other over-engineering
+
+- Config objects for two options. Pass the two args.
+- Boolean soup (`isCompactDenseAlt`). Two call sites or a variant union.
+- Try/catch that only rethrows. Empty `catch {}`.
+- Extra context/provider for a value used in one tree.
+- Pass-through components that add no markup, state, or behavior.
+- Abstractions for a hypothetical third use. YAGNI.
+- New libraries for something the repo already does (another schema lib, another date lib, another toast).
 
 ## Stack notes
 
-Use the repo's existing validation and error types. Do not invent a new parsing library.
+Use the repo's existing validation, tokens, and error types. Do not invent a new parsing library.
 
 | Stack | Boundary | Interior |
 | --- | --- | --- |
-| NestJS | DTO / Zod / `ValidationPipe` on controllers | Services and repos take typed args, never `any` body leftovers |
-| Next.js | `searchParams`, route handlers, `JSON.parse`, formData | Page/components consume parsed types |
-| TanStack Query / Router | `queryFn` return type is the resource; parse errors to the project's error class | No `data as T` after a typed client |
-| Expo / RN | route params (`useLocalSearchParams<{ id: string }>()`), MMKV/JSON, native callbacks | Screens use the parsed type; clone when a native API needs mutable arrays |
-| OpenAPI clients | trust generated response types when they match; do not invent `as unknown as Entity[]` | If the spec is wrong, say so — do not "fix" generated files |
+| NestJS | DTO / Zod / `ValidationPipe` on controllers | Services take typed args. Share pipes/guards; do not copy them per module |
+| Next.js | `searchParams`, route handlers, `JSON.parse`, formData | Pages consume parsed types. Colors via CSS variables / Tailwind theme |
+| TanStack Query / Router | `queryFn` returns the resource; errors use the project error class | No `data as T` after a typed client. No duplicate query-key helpers |
+| Expo / RN | route params, MMKV/JSON, native callbacks | `className` + `useCSSVariable` for colors. Clone when a native API needs mutable arrays |
+| OpenAPI clients | trust generated types when they match | If the spec is wrong, say so — do not edit generated files |
 
 ## Done when
 
-- No new chained assertions, `any` production contracts, or widen-then-assert in the files you touched.
-- Typecheck passes for those files (or the project's typecheck; ignore failures in files you were told not to touch).
-- The diff is smaller than a clever type system. If a workaround needs a long explanation, find a simpler one.
+- Touched files have no new chained assertions, `any` contracts, copy-pasted helpers, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
+- Typecheck passes for those files (ignore failures in files you were told not to touch).
+- The diff is smaller than the clever version. If a workaround needs a long explanation, find a simpler one.
 
-Concrete before/after snippets: [examples.md](examples.md).
+Concrete snippets: [examples.md](examples.md).

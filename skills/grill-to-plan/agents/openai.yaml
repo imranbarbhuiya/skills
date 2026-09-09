@@ -1,0 +1,5 @@
+interface:
+  display_name: "Grill to Plan"
+  short_description: "Interview the user into a plan folder with a task board"
+policy:
+  allow_implicit_invocation: false

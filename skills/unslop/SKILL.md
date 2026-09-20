@@ -1,27 +1,29 @@
 ---
 name: unslop
 description: >-
-  Removes low-evidence TypeScript, over-engineering, duplication, dead leftovers,
-  hardcoded theme values, and heavy validation. Use when the user says unslop,
-  anti-slop, tighten types, kill slop, simplify, inline this, or scan for
+  Removes low-evidence types, over-engineering, duplication, dead leftovers,
+  hardcoded theme values, and heavy validation. Concrete examples are TypeScript
+  and JavaScript (NestJS, Next.js, TanStack, Expo, React Native); apply the same
+  philosophy in other languages. Use after writing or editing application code,
+  on files you touched, not a repo sweep. Also use when the user says unslop,
+  anti-slop, tighten types, kill slop, inline this, or asks to scan for
   fabricated evidence, copy-pasted helpers, unused code, or token-less colors.
-  Works across NestJS, Next.js, TanStack, Expo, React Native, and similar apps.
-disable-model-invocation: true
+  Skip planning, research, and questions that do not change code.
 ---
 
 # Unslop
 
-Opinionated pass for TypeScript and JavaScript apps. This is not a linter install: do not add Oxlint plugins or vendor extra lint rules for this pass.
+Opinionated cleanup pass. Examples and stack notes are TypeScript and JavaScript. Apply the same philosophy in other languages. This is not a linter install: do not add Oxlint plugins or vendor extra lint rules for this pass.
 
 Do not fabricate type evidence. Do not over-build. Do not leave leftovers. This is a surgical cleanup, not a rewrite. Leave valid current code alone.
 
 ## Workflow
 
-1. Detect the stack (`package.json`, `nest-cli.json`, `app.json`, `expo`, `@tanstack/*`). Use that project's package manager, tokens (`global.css`, theme, CSS variables), and typecheck command.
-2. Scope: named files, or unstaged/untracked work. If the tree is clean and no files were named, ask for a scope; do not sweep the repo. Whole-repo only if asked. Never edit staged files unless asked. Never edit generated output (`openapi/`, `*.gen.ts`, Prisma client, route types, lockfiles).
+1. Detect the stack from the project (`package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `app.json`, `expo`, `@tanstack/*`). Use that project's package manager, design tokens, and check command.
+2. Scope: files you just wrote or edited this turn, named files, or unstaged/untracked work. Do not expand to siblings. If invoked by name with a clean tree and no files named, ask for a scope; do not sweep the repo. Whole-repo only if asked. Never edit staged files unless asked. Never edit generated output (`openapi/`, `*.gen.ts`, Prisma client, route types, lockfiles, protobuf stubs).
 3. Fix only real slop: fabricated types, copy-paste, token-less colors, heavy validation, pointless splits, dead code. Do not restyle or reorganize for taste.
-4. Prefer the smallest real contract. If a value is already known, do not add recursive guards "for TypeScript."
-5. Typecheck what you touched. Do not run the full test suite unless shared primitives / `utils/` changed, or the user asked.
+4. Prefer the smallest real contract. If a value is already known, do not add recursive guards for the typechecker.
+5. Check what you touched with that repo's command (typecheck, `cargo check`, package tests). Do not run the full test suite unless shared primitives / `utils/` changed, or the user asked.
 6. Explain in the conversation. If a fix is risky or you cannot prove it safe, report it instead of applying it. Do not write a summary document.
 
 ## Hard constraints
@@ -35,9 +37,11 @@ Do not fabricate type evidence. Do not over-build. Do not leave leftovers. This 
 - Do not chase every `{...(cond ? { x } : {})}` spread unless it is hiding a typing lie.
 - Do not extract a helper that is used once. Do not inline a shared helper that is already the project convention.
 
+JSX, `import()`, className, and `*Shape` bullets apply to JS/TS UI. Elsewhere keep no-comments, no one-use extract, no leftover rewrite; skip inapplicable bullets.
+
 ## Types
 
-Treat these as errors in **application** code. Generated files and third-party `.d.ts` are out of scope.
+Treat these as errors in **application** code. Generated files and third-party stubs (`.d.ts`, protobuf, generated clients) are out of scope. The table is TypeScript; in other languages reject the equivalent (silencing the checker, `Any` / `object` / `dyn`, force-unwrap to make it compile).
 
 | Reject | Prefer |
 | --- | --- |
@@ -129,6 +133,8 @@ Before deleting an export, search the repo for the identifier — tests, native 
 
 Use the repo's existing validation, tokens, and error types. Do not invent a new parsing library.
 
+If the repo is not one of these, map the row: boundary = untrusted input, interior = already-typed values. Use that language's checker and the project's parse, theme, and error types.
+
 | Stack | Boundary | Interior |
 | --- | --- | --- |
 | NestJS | DTO / Zod / `ValidationPipe` on controllers | Services take typed args. Share pipes/guards; do not copy them per module |
@@ -139,8 +145,8 @@ Use the repo's existing validation, tokens, and error types. Do not invent a new
 
 ## Done when
 
-- Touched files have no new chained assertions, `any` contracts, copy-pasted helpers, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
-- Typecheck passes for those files (ignore failures in files you were told not to touch).
+- Touched files have no new chained assertions, untyped contracts, copy-pasted helpers, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
+- The repo's check command passes for those files (ignore failures in files you were told not to touch).
 - The diff is smaller than the clever version.
 
 Concrete snippets: [examples.md](examples.md).

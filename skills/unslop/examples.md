@@ -1,6 +1,6 @@
 # Unslop examples
 
-Read this only when a fix is ambiguous.
+Read this only when a fix is ambiguous. TypeScript recipes of the philosophy; translate to the host language.
 
 ## Chained assertion
 

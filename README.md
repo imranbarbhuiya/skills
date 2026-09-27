@@ -42,17 +42,17 @@ npx skills add https://github.com/imranbarbhuiya/skills
 npx skills add https://github.com/imranbarbhuiya/skills/tree/main/skills/unslop
 ```
 
-`unslop` is available for the agent to apply on its own after it edits application code. `grill-to-plan` is explicit-only (`disable-model-invocation: true`); invoke it by name.
+`unslop` is available for the agent to apply on its own while it writes and edits application code. `grill-to-plan` is explicit-only (`disable-model-invocation: true`); invoke it by name.
 
 ## unslop
 
 [![unslop](https://skills.sh/b/imranbarbhuiya/skills?label=unslop)](https://skills.sh/imranbarbhuiya/skills/unslop)
 
-Parse at the boundary. Keep known types known. Inline one-use wrappers. Use design tokens. Delete leftovers.
+Reuse what the repo and its design system already have. Parse at the boundary. Keep known types known. Inline one-use wrappers. Use design tokens. Delete leftovers.
 
 Examples and stack notes are TypeScript (NestJS, Next.js, TanStack, Expo, React Native). The same philosophy applies in other languages.
 
-The agent should apply it to files it just wrote or edited. You can still invoke `/unslop`, or ask it to unslop, tighten types, inline splits, or remove dead code.
+The agent should follow it while writing code and run the cleanup on files it just wrote or edited. You can still invoke `/unslop`, or ask it to unslop, tighten types, inline splits, or remove dead code.
 
 It will not rewrite valid code, generated OpenAPI, or staged files unless you say so.
 

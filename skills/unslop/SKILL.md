@@ -4,18 +4,32 @@ description: >-
   Removes low-evidence types, over-engineering, duplication, dead leftovers,
   hardcoded theme values, and heavy validation. Concrete examples are TypeScript
   and JavaScript (NestJS, Next.js, TanStack, Expo, React Native); apply the same
-  philosophy in other languages. Use after writing or editing application code,
-  on files you touched, not a repo sweep. Also use when the user says unslop,
-  anti-slop, tighten types, kill slop, inline this, or asks to scan for
+  philosophy in other languages. Use while writing or editing application code
+  and on the files you touched afterwards, not a repo sweep. Also use when the
+  user says unslop, anti-slop, tighten types, kill slop, inline this, or asks to scan for
   fabricated evidence, copy-pasted helpers, unused code, or token-less colors.
   Skip planning, research, and questions that do not change code.
 ---
 
 # Unslop
 
-Opinionated cleanup pass. Examples and stack notes are TypeScript and JavaScript. Apply the same philosophy in other languages. This is not a linter install: do not add Oxlint plugins or vendor extra lint rules for this pass.
+Opinionated rules for writing application code and for the cleanup pass after it. Examples and stack notes are TypeScript and JavaScript. Apply the same philosophy in other languages. This is not a linter install: do not add Oxlint plugins or vendor extra lint rules for this pass.
 
 Do not fabricate type evidence. Do not over-build. Do not leave leftovers. This is a surgical cleanup, not a rewrite. Leave valid current code alone.
+
+## Before writing
+
+Before adding code, take the first of these that covers the need:
+
+1. It does not need to exist: a hypothetical need, a "for later" option, an abstraction with one user. Skip it.
+2. The repo already has it: a helper, hook, component, type, schema, or pattern. Reuse it.
+3. The project's design system or an installed dependency covers it. Use it; this wins over a native element or hand-rolled code the project does not use.
+4. The language, standard library, or platform covers it (a native input, CSS instead of JS, a DB constraint), and the project has no library or design-system component for it. Use it.
+5. Only then write new code, the smallest that does the full job.
+
+Less code is the tiebreaker between options that do the same thing, never a reason to drop behavior. Keep every feature, edge case, error path, accessibility detail, and boundary validation the task needs. Do not add a dependency for something a few lines cover.
+
+Fixing a bug: find every caller of the code you are about to change, and fix it where they all route through, not with a guard on the one path the report names.
 
 ## Workflow
 
@@ -28,7 +42,7 @@ Do not fabricate type evidence. Do not over-build. Do not leave leftovers. This 
 
 ## Hard constraints
 
-- Do not add comments, including `SAFETY:` comments. If a workaround needs a paragraph, it is the wrong workaround.
+- No comments. The only exception is code a reader would otherwise break, such as a non-obvious workaround or an external constraint; then one short line. `SAFETY:` comments and comments that restate the code are never the exception. If a workaround needs a paragraph, it is the wrong workaround.
 - Do not add blank lines between JSX siblings or between a parent and its children.
 - Do not introduce dynamic `import()` inside a component. Imports stay at the top of the file.
 - Do not "fix" import order, className order, or indentation.
@@ -128,6 +142,7 @@ Before deleting an export, search the repo for the identifier — tests, native 
 - Pass-through components that add no markup, state, or behavior.
 - Abstractions for a hypothetical third use. YAGNI.
 - New libraries for something the repo already does (another schema lib, another date lib, another toast).
+- Hand-rolled code for what the project's design system, an installed dependency, or the platform already does (a custom debounce, deep clone, or date math; a custom picker where the design system has one).
 
 ## Stack notes
 

@@ -1,5 +1,5 @@
 interface:
   display_name: "Grill to Plan"
-  short_description: "Interview the user into a plan folder with a task board"
+  short_description: "Interview the user into a plan, then orchestrate subagents through it"
 policy:
   allow_implicit_invocation: false

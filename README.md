@@ -7,7 +7,7 @@ Agent skills for cleaning up slop in application code, and turning a rough brief
 | Skill | What it does | Folder |
 | --- | --- | --- |
 | `unslop` | Removes low-evidence types, over-engineering, duplication, dead leftovers, and hardcoded theme values. | [`skills/unslop`](skills/unslop) |
-| `grill-to-plan` | Grills you round by round, then writes a plan folder with a numbered decision log, one file per task, and a status board. | [`skills/grill-to-plan`](skills/grill-to-plan) |
+| `grill-to-plan` | Grills you round by round, writes a plan folder with a numbered decision log and one file per task, then orchestrates subagents through it when you say start. | [`skills/grill-to-plan`](skills/grill-to-plan) |
 
 ## Install
 
@@ -68,9 +68,9 @@ Type evidence rules follow [dmmulroy/anti-slop](https://github.com/dmmulroy/anti
 
 [![grill-to-plan](https://skills.sh/b/imranbarbhuiya/skills?label=grill-to-plan)](https://skills.sh/imranbarbhuiya/skills/grill-to-plan)
 
-Three phases: **learn** the current state before asking, **grill** in rounds until nothing is silently assumed, **write** the plan folder. Then it keeps the plan alive while work runs.
+Five phases: **learn** the current state before asking, **grill** in rounds until nothing is silently assumed, **write** the plan folder, **set up execution** (how many subagents run at once, whether they commit and push, and whether work lands on the default branch or as one PR per task, recommended from the repo's history), then wait for you to say start and **orchestrate** subagents through the tasks.
 
-Facts come from the codebase, decisions come from you. The output is an overview with a numbered decision log, one file per task with frontmatter, and a status board that parallel agents can claim work from.
+Facts come from the codebase, decisions come from you. The output is an overview with a numbered decision log and a status table the orchestrator keeps current, plus one file per task.
 
 Invoke it explicitly: `/grill-to-plan`, or say grill me into a plan, plan this by asking me questions, write a plan folder, or split this into tasks.
 

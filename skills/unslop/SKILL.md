@@ -148,7 +148,6 @@ Inline when a name adds no information:
 - A 3-line function used once in the same file
 - A new file for a component used once by one parent
 - `useMemo` / `useCallback` around a cheap value or a callback passed to a DOM node
-- Derived state copied into `useState` + `useEffect`
 
 Keep a split when it is a real boundary: a repeated card, a schema module the form already uses, a hook with its own state/subscriptions.
 
@@ -191,6 +190,13 @@ Before deleting an export, search the repo for the identifier — tests, native 
 - Abstractions for a hypothetical future use. An interface, abstract class, port, or DI token with one implementation is a hypothetical seam; with two (a test double counts), it is real.
 - New libraries for something the repo already does (another schema lib, another date lib, another toast).
 - Hand-rolled code for what the project's design system, an installed dependency, or the platform already does (a custom debounce, deep clone, or date math; a custom picker where the design system has one).
+
+## React
+
+- Derive values during render. Do not copy props or other state into `useState` and sync it with `useEffect`; to reset state when an ID changes, give the component a `key`.
+- A side effect caused by a user action runs in the event handler, not as state set in the handler and an effect that watches it.
+- Do not define a component inside another component. It remounts on every render.
+- `{count && <Badge />}` renders `0`. Use a ternary or a real boolean when the value can be `0` or `NaN`.
 
 ## Tests you write
 

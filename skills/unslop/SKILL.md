@@ -1,14 +1,16 @@
 ---
 name: unslop
 description: >-
-  Removes low-evidence types, over-engineering, duplication, special-case
-  patches, dead leftovers, hardcoded theme values, and heavy validation.
-  Concrete examples are TypeScript and JavaScript (NestJS, Next.js, TanStack,
-  Expo, React Native); apply the same
-  philosophy in other languages. Use while writing or editing application code
-  and on the files you touched afterwards, not a repo sweep. Also use when the
-  user says unslop, anti-slop, tighten types, kill slop, inline this, or asks to scan for
-  fabricated evidence, copy-pasted helpers, unused code, or token-less colors.
+  Rules for writing clean application code and cleaning up what you touched:
+  no low-evidence types, special-case patches, hidden failures,
+  over-engineering, duplication, tangled structure, dead leftovers, hardcoded
+  theme values, heavy validation, or tests that cannot fail. Concrete examples
+  are TypeScript and JavaScript (NestJS, Next.js, TanStack, Expo, React
+  Native); apply the same philosophy in other languages. Use while writing or
+  editing application code and on the files you touched afterwards, not a repo
+  sweep. Also use when the user says unslop, anti-slop, clean this up, tighten
+  types, kill slop, inline this, or asks to scan for fabricated evidence,
+  swallowed errors, copy-pasted helpers, unused code, or token-less colors.
   Skip planning, research, and questions that do not change code.
 ---
 
@@ -16,7 +18,7 @@ description: >-
 
 Opinionated rules for writing application code and for the cleanup pass after it. Examples and stack notes are TypeScript and JavaScript. Apply the same philosophy in other languages. This is not a linter install: do not add Oxlint plugins or vendor extra lint rules for this pass.
 
-Do not fabricate type evidence. Do not over-build. Do not leave leftovers. This is a surgical cleanup, not a rewrite. Leave valid current code alone.
+Do not fabricate type evidence. Do not patch symptoms or hide failures. Do not over-build. Do not leave leftovers. This is a surgical cleanup, not a rewrite. Leave valid current code alone.
 
 ## Before writing
 
@@ -57,7 +59,7 @@ Before removing one, read its callers and `git blame` to learn why it exists; th
 
 1. Detect the stack from the project (`package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `app.json`, `expo`, `@tanstack/*`). Use that project's package manager, design tokens, and check command.
 2. Scope: files you just wrote or edited this turn, named files, or unstaged/untracked work. Do not expand to siblings. If invoked by name with a clean tree and no files named, ask for a scope; do not sweep the repo. Whole-repo only if asked. Never edit staged files unless asked. Never edit generated output (`openapi/`, `*.gen.ts`, Prisma client, route types, lockfiles, protobuf stubs).
-3. Fix only real slop: fabricated types, copy-paste, token-less colors, heavy validation, pointless splits, dead code. Do not restyle or reorganize for taste.
+3. Fix only what the sections below call out. Do not restyle or reorganize for taste; structural problems in existing code are reported, not reorganized (see Structure).
 4. Prefer the smallest real contract. If a value is already known, do not add recursive guards for the typechecker.
 5. Check what you touched with that repo's command (typecheck, `cargo check`, package tests). Do not run the full test suite unless shared primitives / `utils/` changed, or the user asked. If a cleanup makes a test fail, the cleanup changed behavior: revert it or report it, do not edit the test to match.
 6. Explain in the conversation. If a fix is risky or you cannot prove it safe, report it instead of applying it. Do not write a summary document.
@@ -219,7 +221,8 @@ If the repo is not one of these, map the row: boundary = untrusted input, interi
 
 ## Done when
 
-- Touched files have no new chained assertions, untyped contracts, copy-pasted helpers or lists, hardcoded theme literals, heavy validators, one-use wrappers, special cases you could fix at the cause, or dead leftovers you could prove unused.
+- Touched files have no new chained assertions, untyped contracts, special cases you could fix at the cause, swallowed errors or unrequested fallbacks, copy-pasted helpers or lists, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
+- New code follows Readable code and Structure, and new tests follow [tests.md](tests.md).
 - The repo's check command passes for those files (ignore failures in files you were told not to touch).
 - The diff is smaller than the clever version.
 

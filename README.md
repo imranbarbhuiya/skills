@@ -59,6 +59,7 @@ It will not rewrite valid code, generated OpenAPI, or staged files unless you sa
 ```
 skills/unslop/SKILL.md
 skills/unslop/examples.md
+skills/unslop/tests.md
 skills/unslop/agents/openai.yaml
 ```
 

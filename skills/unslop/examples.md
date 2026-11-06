@@ -28,6 +28,38 @@ const empty = (): FormInput => ({ name: '' });
 
 Same `mapStatus` in three screens → one `utils/status.ts` (or the repo's existing mapper). Do not add `lib/helpers/status-utils.ts` if `utils/` already exists.
 
+## Special case (fix the cause)
+
+```tsx
+const onClose = () => {
+	setOpen(false);
+	setTimeout(() => messageInputRef.current?.focus(), 100);
+};
+```
+
+The wait hopes the input can take focus by then. Make the shared `Dialog` return focus to whatever had it before it opened (or use the design system's dialog, which usually already does), and delete the timeout.
+
+## Duplicated list
+
+```ts
+// toolbar.tsx
+const actions = ['bold', 'italic', 'link'];
+// keymap.ts
+switch (action) { case 'bold': ... case 'italic': ... }
+// command-palette.tsx
+const commands = ['bold', 'italic'];
+```
+
+```ts
+// commands.ts
+export const commands = [
+	{ id: 'bold', label: 'Bold', shortcut: 'mod+b', run: toggleBold },
+	...
+] as const;
+```
+
+Toolbar, keymap, and palette all read `commands`, so a new action lands in one place.
+
 ## One-use split (inline)
 
 ```ts

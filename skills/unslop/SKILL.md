@@ -1,9 +1,10 @@
 ---
 name: unslop
 description: >-
-  Removes low-evidence types, over-engineering, duplication, dead leftovers,
-  hardcoded theme values, and heavy validation. Concrete examples are TypeScript
-  and JavaScript (NestJS, Next.js, TanStack, Expo, React Native); apply the same
+  Removes low-evidence types, over-engineering, duplication, special-case
+  patches, dead leftovers, hardcoded theme values, and heavy validation.
+  Concrete examples are TypeScript and JavaScript (NestJS, Next.js, TanStack,
+  Expo, React Native); apply the same
   philosophy in other languages. Use while writing or editing application code
   and on the files you touched afterwards, not a repo sweep. Also use when the
   user says unslop, anti-slop, tighten types, kill slop, inline this, or asks to scan for
@@ -31,6 +32,18 @@ Less code is the tiebreaker between options that do the same thing, never a reas
 
 Fixing a bug: find every caller of the code you are about to change, and fix it where they all route through, not with a guard on the one path the report names.
 
+## Special cases
+
+A special case is code that exists for one situation instead of following from how the system works. Each one points at a requirement the design missed. Do not write them as fixes, and treat them as slop in the code you touch:
+
+- An `if` for one specific value, ID, route, or caller
+- A parameter or flag only one caller understands, on a function others share
+- A swallowed exception, or a `catch` that returns a default to make an error go away
+- A `setTimeout`, sleep, retry, or `requestAnimationFrame` that waits and hopes something is ready
+- A disabled, skipped, or loosened test to get green
+
+Fix the cause in the shared code so the special case is unnecessary. If the cause is outside your scope, keep the special case, give it the one-line comment that names the external reason, and report it.
+
 ## Workflow
 
 1. Detect the stack from the project (`package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `app.json`, `expo`, `@tanstack/*`). Use that project's package manager, design tokens, and check command.
@@ -43,6 +56,7 @@ Fixing a bug: find every caller of the code you are about to change, and fix it 
 ## Hard constraints
 
 - No comments. The only exception is code a reader would otherwise break, such as a non-obvious workaround or an external constraint; then one short line. `SAFETY:` comments and comments that restate the code are never the exception. If a workaround needs a paragraph, it is the wrong workaround.
+- A comment that explains the implementation is restating it, even when phrased as a why (`// sort first so the binary search works`). Keep only comments about something outside the code that the code cannot show (`// the proxy drops websockets, so we poll`).
 - Do not add blank lines between JSX siblings or between a parent and its children.
 - Do not introduce dynamic `import()` inside a component. Imports stay at the top of the file.
 - Do not "fix" import order, className order, or indentation.
@@ -82,6 +96,8 @@ Leave: library generic slots (`useForm<TField, unknown, TOutput>`), `catch (erro
 ## Duplication
 
 Same non-trivial function, mapper, error throw, or fetch wrapper in two or more files → one shared helper in the place this repo already uses (`utils/`, `lib/`, a module). Do not invent a new folder.
+
+Values and lists count too. The same constant, enum, or list of things (actions, routes, statuses, feature flags) kept in two places drifts: a keymap switch, a menu array, and a command palette list that each name the same actions. Derive them from one source.
 
 Do not copy a local helper that already exists. Search before writing `formatDate`, `isRecord`, `toUserMessage`, `getHeaders`, or the equivalent.
 
@@ -144,6 +160,16 @@ Before deleting an export, search the repo for the identifier — tests, native 
 - New libraries for something the repo already does (another schema lib, another date lib, another toast).
 - Hand-rolled code for what the project's design system, an installed dependency, or the platform already does (a custom debounce, deep clone, or date math; a custom picker where the design system has one).
 
+## Tests you write
+
+A test should fail on a regression, and only then. When you add or edit tests:
+
+- Do not write a test that can't fail: asserting a mock returns what it was told to, or that a function was called with no check on the result.
+- Do not write a test that repeats the implementation, such as rebuilding the expected value with the same logic as the code under test.
+- Test behavior through the public interface, not internals, so a refactor that keeps behavior does not break it.
+
+Existing tests stay as they are unless you were asked to fix them.
+
 ## Stack notes
 
 Use the repo's existing validation, tokens, and error types. Do not invent a new parsing library.
@@ -160,7 +186,7 @@ If the repo is not one of these, map the row: boundary = untrusted input, interi
 
 ## Done when
 
-- Touched files have no new chained assertions, untyped contracts, copy-pasted helpers, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
+- Touched files have no new chained assertions, untyped contracts, copy-pasted helpers or lists, hardcoded theme literals, heavy validators, one-use wrappers, special cases you could fix at the cause, or dead leftovers you could prove unused.
 - The repo's check command passes for those files (ignore failures in files you were told not to touch).
 - The diff is smaller than the clever version.
 

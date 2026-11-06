@@ -6,7 +6,7 @@ Agent skills for cleaning up slop in application code, and turning a rough brief
 
 | Skill | What it does | Folder |
 | --- | --- | --- |
-| `unslop` | Removes low-evidence types, over-engineering, duplication, dead leftovers, and hardcoded theme values. | [`skills/unslop`](skills/unslop) |
+| `unslop` | Rules for clean application code: no low-evidence types, special-case patches, hidden failures, over-engineering, duplication, tangled structure, dead leftovers, hardcoded theme values, or tests that cannot fail. | [`skills/unslop`](skills/unslop) |
 | `grill-to-plan` | Grills you round by round, writes a plan folder with a numbered decision log and one file per task, then orchestrates subagents through it when you say start. | [`skills/grill-to-plan`](skills/grill-to-plan) |
 
 ## Install
@@ -48,7 +48,7 @@ npx skills add https://github.com/imranbarbhuiya/skills/tree/main/skills/unslop
 
 [![unslop](https://skills.sh/b/imranbarbhuiya/skills?label=unslop)](https://skills.sh/imranbarbhuiya/skills/unslop)
 
-Reuse what the repo and its design system already have. Parse at the boundary. Keep known types known. Inline one-use wrappers. Use design tokens. Delete leftovers.
+Reuse what the repo and its design system already have. Fix causes, not symptoms, and let failures surface. Parse at the boundary. Keep known types known. Inline one-use wrappers. Keep features together and dependencies pointing at what changes less. Use design tokens. Delete leftovers. Write tests that fail on a regression.
 
 Examples and stack notes are TypeScript (NestJS, Next.js, TanStack, Expo, React Native). The same philosophy applies in other languages.
 

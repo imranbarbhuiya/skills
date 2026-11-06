@@ -65,7 +65,7 @@ Before removing one, read its callers and `git blame` to learn why it exists; th
 ## Hard constraints
 
 - No comments. The only exception is code a reader would otherwise break, such as a non-obvious workaround or an external constraint; then one short line. `SAFETY:` comments and comments that restate the code are never the exception. If a workaround needs a paragraph, it is the wrong workaround.
-- A comment that explains the implementation is restating it, even when phrased as a why (`// sort first so the binary search works`). Keep only comments about something outside the code that the code cannot show (`// the proxy drops websockets, so we poll`).
+- A comment that explains the implementation is restating it, even when phrased as a why (`// sort first so the binary search works`). Keep only comments about something outside the code that the code cannot show (`// the proxy drops websockets, so we poll`). When you change code, update or delete every comment the change makes wrong.
 - Do not add blank lines between JSX siblings or between a parent and its children.
 - Do not introduce dynamic `import()` inside a component. Imports stay at the top of the file.
 - Do not "fix" import order, className order, or indentation.
@@ -174,7 +174,8 @@ Delete what the compiler and the product no longer use:
 - Commented-out code, `TODO` that is already done, `FIXME` with a working path beside it
 - Stray debug `console.log`, comments that only restate the line below them
 - Always-true / always-false flags, dead branches, old and new implementations kept "just in case"
-- Deprecated wrappers that only call the new function
+- Deprecated wrappers that only call the new function, and backwards-compatibility shims nothing calls
+- Traces of the change itself: `// new implementation`, `// changed from X`, `// removed`, variables renamed to `_unused` instead of deleted
 - Unreachable defaults after a union is already exhaustive
 
 Before deleting an export, search the repo for the identifier — tests, native code, and string references (DI tokens, route names, dynamic keys) count, not just TS imports. Public APIs and fixtures stay unless proven dead.

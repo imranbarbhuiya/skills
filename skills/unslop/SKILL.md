@@ -42,7 +42,16 @@ A special case is code that exists for one situation instead of following from h
 - A `setTimeout`, sleep, retry, or `requestAnimationFrame` that waits and hopes something is ready
 - A disabled, skipped, or loosened test to get green
 
-Fix the cause in the shared code so the special case is unnecessary. If the cause is outside your scope, keep the special case, give it the one-line comment that names the external reason, and report it.
+Before removing one, read its callers and `git blame` to learn why it exists; the reason may be an external constraint the code cannot show. Then fix the cause in the shared code so the special case is unnecessary. The fix makes the shared code general; moving the special case inward, as a branch or flag only one caller understands, is not a fix. If the cause is outside your scope, keep the special case, give it the one-line comment that names the external reason, and report it.
+
+## Errors and fallbacks
+
+- Catch only the errors you expect and can handle. A broad `catch` around a block also hides the failures you did not think of; narrow it or let it throw.
+- No `catch` that only rethrows, and no empty `catch {}`.
+- No fallback the spec did not ask for. A default, empty, or cached value returned on failure hides the failure. Never fall back to a mock, stub, or fake outside tests.
+- Do not let failures pass quietly: `?.` over a call that must run, a `catch` that only logs and continues, retries that run out without surfacing the error.
+- An error the user sees says what failed and what they can do next, through the project's error type.
+- Match the area's norm. Do not add try/catch or defensive checks where the surrounding code has none, or on a path that is already validated.
 
 ## Workflow
 
@@ -152,7 +161,6 @@ Before deleting an export, search the repo for the identifier — tests, native 
 
 - Config objects for two options. Pass the two args.
 - Boolean soup (`isCompactDenseAlt`). Two call sites or a variant union.
-- Try/catch that only rethrows. Empty `catch {}`.
 - `return Promise.resolve(x)` inside `async`, `new Promise` wrapping an existing promise, `await` on a non-promise.
 - Extra context/provider for a value used in one tree.
 - Pass-through components that add no markup, state, or behavior.

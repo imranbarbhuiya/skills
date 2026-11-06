@@ -59,7 +59,7 @@ Before removing one, read its callers and `git blame` to learn why it exists; th
 2. Scope: files you just wrote or edited this turn, named files, or unstaged/untracked work. Do not expand to siblings. If invoked by name with a clean tree and no files named, ask for a scope; do not sweep the repo. Whole-repo only if asked. Never edit staged files unless asked. Never edit generated output (`openapi/`, `*.gen.ts`, Prisma client, route types, lockfiles, protobuf stubs).
 3. Fix only real slop: fabricated types, copy-paste, token-less colors, heavy validation, pointless splits, dead code. Do not restyle or reorganize for taste.
 4. Prefer the smallest real contract. If a value is already known, do not add recursive guards for the typechecker.
-5. Check what you touched with that repo's command (typecheck, `cargo check`, package tests). Do not run the full test suite unless shared primitives / `utils/` changed, or the user asked.
+5. Check what you touched with that repo's command (typecheck, `cargo check`, package tests). Do not run the full test suite unless shared primitives / `utils/` changed, or the user asked. If a cleanup makes a test fail, the cleanup changed behavior: revert it or report it, do not edit the test to match.
 6. Explain in the conversation. If a fix is risky or you cannot prove it safe, report it instead of applying it. Do not write a summary document.
 
 ## Hard constraints
@@ -201,13 +201,7 @@ Before deleting an export, search the repo for the identifier — tests, native 
 
 ## Tests you write
 
-A test should fail on a regression, and only then. When you add or edit tests:
-
-- Do not write a test that can't fail: asserting a mock returns what it was told to, or that a function was called with no check on the result.
-- Do not write a test that repeats the implementation, such as rebuilding the expected value with the same logic as the code under test.
-- Test behavior through the public interface, not internals, so a refactor that keeps behavior does not break it.
-
-Existing tests stay as they are unless you were asked to fix them.
+A test should fail on a regression, and only then. Before adding or editing a test, read [tests.md](tests.md): name the break, no tests that can't fail or that repeat the implementation, no change detectors, mock only at system boundaries. Existing tests stay as they are unless you were asked to fix them.
 
 ## Stack notes
 

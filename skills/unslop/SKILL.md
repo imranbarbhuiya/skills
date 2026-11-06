@@ -106,7 +106,7 @@ Leave: library generic slots (`useForm<TField, unknown, TOutput>`), `catch (erro
 
 Same non-trivial function, mapper, error throw, or fetch wrapper in two or more files → one shared helper in the place this repo already uses (`utils/`, `lib/`, a module). Do not invent a new folder.
 
-Values and lists count too. The same constant, enum, or list of things (actions, routes, statuses, feature flags) kept in two places drifts: a keymap switch, a menu array, and a command palette list that each name the same actions. Derive them from one source.
+Values and lists count too. The same constant, enum, or list of things (actions, routes, statuses, feature flags) kept in two places drifts: a keymap switch, a menu array, and a command palette list that each name the same actions. Derive them from one source. The same `switch` or if-chain on the same type in two places is the same problem: one map or model both read.
 
 Do not copy a local helper that already exists. Search before writing `formatDate`, `isRecord`, `toUserMessage`, `getHeaders`, or the equivalent.
 
@@ -139,6 +139,8 @@ If the caller already passed a branded ID or form `z.output`, do not re-validate
 
 ## Splitting
 
+Deletion test: imagine inlining the function, component, or module into its callers. If the complexity disappears, it was a pass-through; inline it. If the same complexity reappears in every caller, it is earning its place; keep it.
+
 Inline when a name adds no information:
 
 - `const isLoading = loading`
@@ -150,7 +152,20 @@ Inline when a name adds no information:
 
 Keep a split when it is a real boundary: a repeated card, a schema module the form already uses, a hook with its own state/subscriptions.
 
-Prefer one 40-line function over four 8-line functions that only exist to call each other.
+Prefer one 40-line function over four 8-line functions that only exist to call each other. The reverse is not simpler either: do not merge unrelated logic into one function, and do not inline a helper whose name explains a concept the caller would otherwise have to work out.
+
+## Structure
+
+Apply these to code you write. In existing code you touch, fix a violation only when your change already crosses it; otherwise report it instead of reorganizing.
+
+- Put new code next to the feature it serves. Do not spread one feature across `components/`, `hooks/`, `types/`, and `utils/` by layer unless that is the repo's layout.
+- Keep feature logic out of shared modules. A shared helper takes general inputs; a branch or flag only one feature understands stays in that feature.
+- Pass values in. A module does not read a global, singleton, or file that another module sets. On the server, no mutable module-level state that holds request data.
+- Make the wrong order impossible. No API where callers must know to call `init()` first or `a()` before `b()`; use a constructor, one function, or types.
+- Use a module's public interface. No deep imports into another module's internals; extend its interface instead.
+- Depend on what changes less. Shared and domain code does not import a screen, a route, or a vendor SDK.
+- Parameters that always travel together become one type.
+- A refactor reduces what a reader has to hold (concepts, modes, branches); it does not move them to another file.
 
 ## Dead leftovers
 
@@ -168,12 +183,12 @@ Before deleting an export, search the repo for the identifier — tests, native 
 ## Other over-engineering
 
 - Config objects for two options. Pass the two args.
-- Boolean soup (`isCompactDenseAlt`). Two call sites or a variant union.
+- Boolean mode props (`isThread`, `isEditing`, `isCompactDenseAlt`). Each one doubles the states. Use explicit variants (`<ThreadComposer />`), a variant union, or composition with `children` instead of `renderX` props. Compound components sharing one context are fine.
 - `return Promise.resolve(x)` inside `async`, `new Promise` wrapping an existing promise, `await` on a non-promise, `return await` in an `async` function that only forwards the promise.
 - Independent `await`s run one after another. Start them together with `Promise.all`.
 - Extra context/provider for a value used in one tree.
 - Pass-through components that add no markup, state, or behavior.
-- Abstractions for a hypothetical third use. YAGNI.
+- Abstractions for a hypothetical future use. An interface, abstract class, port, or DI token with one implementation is a hypothetical seam; with two (a test double counts), it is real.
 - New libraries for something the repo already does (another schema lib, another date lib, another toast).
 - Hand-rolled code for what the project's design system, an installed dependency, or the platform already does (a custom debounce, deep clone, or date math; a custom picker where the design system has one).
 

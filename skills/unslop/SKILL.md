@@ -129,6 +129,14 @@ Reject recursive tree-walks, duplicate Zod schemas for the same payload, `superR
 
 If the caller already passed a branded ID or form `z.output`, do not re-validate it as `unknown`. Same for `?.` and `?? fallback` on values the types already guarantee — defensive chaining is validation slop.
 
+## Readable code
+
+- No nested ternaries. Use early returns, a `switch`, or a lookup map.
+- Return early instead of nesting three levels deep.
+- Return the condition: `return isValid`, not `if (isValid) return true; return false`.
+- A new name says what it holds or does: not `data`, `result`, `temp`, `handle`, or an abbreviation, and never misleading (a `get` that also writes). If no honest name comes, the code is doing too many things. This applies to names you introduce; do not rename existing ones for taste.
+- New code follows the style and patterns of the file it lands in.
+
 ## Splitting
 
 Inline when a name adds no information:
@@ -161,7 +169,8 @@ Before deleting an export, search the repo for the identifier — tests, native 
 
 - Config objects for two options. Pass the two args.
 - Boolean soup (`isCompactDenseAlt`). Two call sites or a variant union.
-- `return Promise.resolve(x)` inside `async`, `new Promise` wrapping an existing promise, `await` on a non-promise.
+- `return Promise.resolve(x)` inside `async`, `new Promise` wrapping an existing promise, `await` on a non-promise, `return await` in an `async` function that only forwards the promise.
+- Independent `await`s run one after another. Start them together with `Promise.all`.
 - Extra context/provider for a value used in one tree.
 - Pass-through components that add no markup, state, or behavior.
 - Abstractions for a hypothetical third use. YAGNI.

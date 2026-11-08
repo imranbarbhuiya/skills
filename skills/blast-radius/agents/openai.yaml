@@ -1,0 +1,5 @@
+interface:
+  display_name: "Blast Radius"
+  short_description: "Find what a change breaks outside its diff, and prove it is safe"
+policy:
+  allow_implicit_invocation: true

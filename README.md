@@ -1,6 +1,6 @@
 # skills
 
-Agent skills for cleaning up slop in application code, and turning a rough brief into a plan folder.
+Agent skills for cleaning up slop in application code, turning a rough brief into a plan folder, and proving what a change breaks before it ships.
 
 [![skills.sh](https://skills.sh/b/imranbarbhuiya/skills)](https://skills.sh/imranbarbhuiya/skills)
 
@@ -8,6 +8,7 @@ Agent skills for cleaning up slop in application code, and turning a rough brief
 | --- | --- | --- |
 | `unslop` | Rules for clean application code: no low-evidence types, special-case patches, hidden failures, over-engineering, duplication, tangled structure, dead leftovers, hardcoded theme values, or tests that cannot fail. | [`skills/unslop`](skills/unslop) |
 | `grill-to-plan` | Grills you round by round, writes a plan folder with a numbered decision log and one file per task, then orchestrates subagents through it when you say start. | [`skills/grill-to-plan`](skills/grill-to-plan) |
+| `blast-radius` | Finds what a change breaks outside its diff, across callers, contracts and repos, and proves the fact it is safe because of by running real code. | [`skills/blast-radius`](skills/blast-radius) |
 
 ## Install
 
@@ -42,7 +43,7 @@ npx skills add https://github.com/imranbarbhuiya/skills
 npx skills add https://github.com/imranbarbhuiya/skills/tree/main/skills/unslop
 ```
 
-`unslop` is available for the agent to apply on its own while it writes and edits application code. `grill-to-plan` is explicit-only (`disable-model-invocation: true`); invoke it by name.
+`unslop` and `blast-radius` are available for the agent to apply on its own: `unslop` while it writes and edits application code, `blast-radius` when you ask whether a change is safe and before it pushes a change to shared code, contracts, schemas, config or dependencies. `grill-to-plan` is explicit-only (`disable-model-invocation: true`); invoke it by name.
 
 ## unslop
 
@@ -80,6 +81,22 @@ skills/grill-to-plan/SKILL.md
 skills/grill-to-plan/templates.md
 skills/grill-to-plan/agents/openai.yaml
 ```
+
+## blast-radius
+
+[![blast-radius](https://skills.sh/b/imranbarbhuiya/skills?label=blast-radius)](https://skills.sh/imranbarbhuiya/skills/blast-radius)
+
+Lists of callers are cheap; the job is the breakage grep does not show. It reads the change, including deleted lines, finds the one fact the change is safe because of, and pushes that fact up a proof ladder: said, pointed at a line, walked, ran, reproduced. It checks callers of shared code, API and DB contracts, generated types, stored data, library source at the installed version, and CI, and reports whether design, logic, performance or CI moved. Before a deploy it sorts changes into no-op, safe, needs a step, and problematic but required.
+
+Targets the working tree, a commit or range, a branch, or a PR, across every repo that shares the contract. The agent uses it when you ask "won't this break X?", "safe to merge?", or "what else did that commit break?", and on its own before pushing risky changes. You can still invoke `/blast-radius`.
+
+```
+skills/blast-radius/SKILL.md
+skills/blast-radius/examples.md
+skills/blast-radius/agents/openai.yaml
+```
+
+Inspired by the [`blast-radius`](https://github.com/cursor/plugins/blob/main/pstack/skills/blast-radius/SKILL.md) skill in Cursor's pstack.
 
 ## Layout
 

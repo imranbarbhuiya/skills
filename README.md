@@ -6,7 +6,7 @@ Agent skills for cleaning up slop in application code, turning a rough brief int
 
 | Skill | What it does | Folder |
 | --- | --- | --- |
-| `unslop` | Rules for clean application code: no low-evidence types, special-case patches, hidden failures, over-engineering, duplication, tangled structure, dead leftovers, hardcoded theme values, or tests that cannot fail. | [`skills/unslop`](skills/unslop) |
+| `unslop` | Rules for clean application code: no low-evidence types, special-case patches, hidden failures, over-engineering, duplication, tangled structure, dead leftovers, hardcoded theme values, string-matched URLs, or tests that cannot fail. | [`skills/unslop`](skills/unslop) |
 | `grill-to-plan` | Grills you round by round, writes a plan folder with a numbered decision log and one file per task, then orchestrates subagents through it when you say start. | [`skills/grill-to-plan`](skills/grill-to-plan) |
 | `blast-radius` | Finds what a change breaks outside its diff, across callers, contracts and repos, and proves the fact it is safe because of by running real code. | [`skills/blast-radius`](skills/blast-radius) |
 

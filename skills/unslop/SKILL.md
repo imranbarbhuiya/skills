@@ -4,7 +4,8 @@ description: >-
   Rules for writing clean application code and cleaning up what you touched:
   no low-evidence types, special-case patches, hidden failures,
   over-engineering, duplication, tangled structure, dead leftovers, hardcoded
-  theme values, heavy validation, or tests that cannot fail. Concrete examples
+  theme values, heavy validation, string-matched URLs and other structured
+  strings, or tests that cannot fail. Concrete examples
   are TypeScript and JavaScript (NestJS, Next.js, TanStack, Expo, React
   Native); apply the same philosophy in other languages. Use while writing or
   editing application code and on the files you touched afterwards, not a repo
@@ -59,7 +60,7 @@ Before removing one, read its callers and `git blame` to learn why it exists; th
 
 1. Detect the stack from the project (`package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `app.json`, `expo`, `@tanstack/*`). Use that project's package manager, design tokens, and check command.
 2. Scope: files you just wrote or edited this turn, named files, or unstaged/untracked work. Do not expand to siblings. If invoked by name with a clean tree and no files named, ask for a scope; do not sweep the repo. Whole-repo only if asked. Never edit staged files unless asked. Never edit generated output (`openapi/`, `*.gen.ts`, Prisma client, route types, lockfiles, protobuf stubs).
-3. Fix only what the sections below call out. Do not restyle or reorganize for taste; structural problems in existing code are reported, not reorganized (see Structure).
+3. Fix only what the sections below call out. Do not restyle or reorganize for taste; structural problems in existing code are reported, not reorganized (see Structure). In the touched files, search for string methods (`includes`, `indexOf`, `startsWith`, `endsWith`, `split`, `replace`) on values named like a URL, link, href, host, path, query, or email, and apply Parse structured strings.
 4. Prefer the smallest real contract. If a value is already known, do not add recursive guards for the typechecker.
 5. Check what you touched with that repo's command (typecheck, `cargo check`, package tests). Do not run the full test suite unless shared primitives / `utils/` changed, or the user asked. If a cleanup makes a test fail, the cleanup changed behavior: revert it or report it, do not edit the test to match.
 6. Explain in the conversation. If a fix is risky or you cannot prove it safe, report it instead of applying it. Do not write a summary document.
@@ -130,6 +131,17 @@ Parse untrusted input once at the boundary (HTTP body, `searchParams`, `JSON.par
 Reject recursive tree-walks, duplicate Zod schemas for the same payload, `superRefine` that repeats `.min()`, and field-by-field `typeof` after a schema already ran.
 
 If the caller already passed a branded ID or form `z.output`, do not re-validate it as `unknown`. Same for `?.` and `?? fallback` on values the types already guarantee — defensive chaining is validation slop.
+
+## Parse structured strings
+
+URLs, paths, query strings, emails, dates, versions, MIME types, JSON, HTML, and CSV have parsers. Use the platform's or the project's, not `includes`, `indexOf`, `startsWith`, `split`, or `replace` on the raw string.
+
+- Check a host by comparing the parsed `hostname` to the domain or a `.domain` suffix. `link.includes('x.com')` also matches `netflix.com` and `evil.com/?x.com`.
+- Read and write queries with `URLSearchParams` or the language's URI type, not `split('&')` and template strings. Hand-splitting skips percent-decoding and drops or swallows the `#fragment`.
+- Route a "stays in the app" check through the repo's existing guard. `startsWith('/')` lets `//host` through to another origin.
+- Match a link or ID format you generate yourself with an anchored pattern of its exact shape, not `startsWith` plus `replace`.
+- A prefix regex ends at a boundary (`(?=[/?#]|$)`), so `/app` does not also match `/apps`.
+- Splitting is fine when the input is not always the structured type (a file name, a relative path, a value that may be a bare path or a full URL). Give it a one-line comment naming why.
 
 ## Readable code
 
@@ -221,7 +233,7 @@ If the repo is not one of these, map the row: boundary = untrusted input, interi
 
 ## Done when
 
-- Touched files have no new chained assertions, untyped contracts, special cases you could fix at the cause, swallowed errors or unrequested fallbacks, copy-pasted helpers or lists, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
+- Touched files have no new chained assertions, untyped contracts, special cases you could fix at the cause, swallowed errors or unrequested fallbacks, string-matched URLs, hosts, or queries, copy-pasted helpers or lists, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
 - New code follows Readable code and Structure, and new tests follow [tests.md](tests.md).
 - The repo's check command passes for those files (ignore failures in files you were told not to touch).
 - The diff is smaller than the clever version.

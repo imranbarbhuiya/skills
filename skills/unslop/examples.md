@@ -101,6 +101,46 @@ const form = isRecord(parsed) ? parsed : {};
 
 Then check individual fields where they are used. Do not walk a tree the screen already owns.
 
+## String-matched URL
+
+```ts
+const platformOf = (link: string) => {
+	if (link.includes('x.com')) return 'X';
+	if (link.includes('instagram.com')) return 'Instagram';
+};
+```
+
+`netflix.com/...` is labelled X. Parse once and compare hosts:
+
+```ts
+const PLATFORMS = [
+	{ domains: ['twitter.com', 'x.com'], name: 'X' },
+	{ domains: ['instagram.com'], name: 'Instagram' },
+];
+
+const platformOf = (link: string) => {
+	const { hostname } = new URL(link);
+	return PLATFORMS.find(({ domains }) =>
+		domains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`)),
+	)?.name;
+};
+```
+
+`new URL` throws on a relative or malformed link. Catch it where the link crosses a boundary (user input, API data rendered in a list) and decide what the UI shows; do not wrap values the code already built.
+
+## Hand-split query
+
+```ts
+const [path, query] = url.split('?');
+const tab = query?.split('&').find((pair) => pair.startsWith('tab='))?.slice(4);
+```
+
+```ts
+const tab = new URL(url, 'https://app.invalid').searchParams.get('tab');
+```
+
+The second decodes `%20` and `+`, ignores the `#fragment`, and handles repeated `?`.
+
 ## Dead leftover
 
 ```ts

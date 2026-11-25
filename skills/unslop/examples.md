@@ -2,16 +2,6 @@
 
 Read this only when a fix is ambiguous. TypeScript recipes of the philosophy; translate to the host language.
 
-## Chained assertion
-
-```ts
-const timeout = setTimeout(fn, 0) as unknown as number;
-```
-
-```ts
-const timeout: ReturnType<typeof setTimeout> = setTimeout(fn, 0);
-```
-
 ## Satisfy then assert
 
 ```ts
@@ -23,10 +13,6 @@ const empty = () =>
 type FormInput = z.input<typeof schema>;
 const empty = (): FormInput => ({ name: '' });
 ```
-
-## Copy-pasted helper
-
-Same `mapStatus` in three screens → one `utils/status.ts` (or the repo's existing mapper). Do not add `lib/helpers/status-utils.ts` if `utils/` already exists.
 
 ## Special case (fix the cause)
 
@@ -141,18 +127,6 @@ const tab = new URL(url, 'https://app.invalid').searchParams.get('tab');
 
 The second decodes `%20` and `+`, ignores the `#fragment`, and handles repeated `?`.
 
-## Dead leftover
-
-```ts
-const [draft, setDraft] = useState(value);
-useEffect(() => setDraft(value), [value]);
-export const oldFormatDate = formatDate;
-```
-
-```ts
-// use `value` directly; delete `oldFormatDate` if nothing imports it
-```
-
 ## Native mutable clone (keep)
 
 ```ts
@@ -160,11 +134,3 @@ export const oldFormatDate = formatDate;
 ```
 
 Not a cast. Keep it when the native API wants a mutable `string[]`.
-
-## Leave generated mismatch
-
-```ts
-return res.data as unknown as ILead[];
-```
-
-If the OpenAPI spec is wrong, report it. Do not edit generated files by hand.

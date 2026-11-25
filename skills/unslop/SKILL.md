@@ -2,22 +2,19 @@
 name: unslop
 description: >-
   Rules for writing clean application code and cleaning up what you touched:
-  no low-evidence types, special-case patches, hidden failures,
-  over-engineering, duplication, tangled structure, dead leftovers, hardcoded
-  theme values, heavy validation, string-matched URLs and other structured
-  strings, or tests that cannot fail. Concrete examples
-  are TypeScript and JavaScript (NestJS, Next.js, TanStack, Expo, React
-  Native); apply the same philosophy in other languages. Use while writing or
-  editing application code and on the files you touched afterwards, not a repo
-  sweep. Also use when the user says unslop, anti-slop, clean this up, tighten
-  types, kill slop, inline this, or asks to scan for fabricated evidence,
-  swallowed errors, copy-pasted helpers, unused code, or token-less colors.
+  honest types, no hidden failures or special-case patches, no
+  over-engineering, duplication, or dead leftovers, parsers and shared
+  formatters instead of hand-rolled string handling, and tests that can fail.
+  Examples are TypeScript and JavaScript; apply the same philosophy in other
+  languages. Use while writing or editing application code and on the files
+  you touched afterwards, not a repo sweep. Also use when the user says
+  unslop, anti-slop, clean this up, tighten types, kill slop, or inline this.
   Skip planning, research, and questions that do not change code.
 ---
 
 # Unslop
 
-Opinionated rules for writing application code and for the cleanup pass after it. Examples and stack notes are TypeScript and JavaScript. Apply the same philosophy in other languages. This is not a linter install: do not add Oxlint plugins or vendor extra lint rules for this pass.
+Opinionated rules for writing application code and for the cleanup pass after it. Examples are TypeScript and JavaScript. Apply the same philosophy in other languages. This is not a linter install: do not add Oxlint plugins or vendor extra lint rules for this pass.
 
 Do not fabricate type evidence. Do not patch symptoms or hide failures. Do not over-build. Do not leave leftovers. This is a surgical cleanup, not a rewrite. Leave valid current code alone.
 
@@ -26,9 +23,9 @@ Do not fabricate type evidence. Do not patch symptoms or hide failures. Do not o
 Before adding code, take the first of these that covers the need:
 
 1. It does not need to exist: a hypothetical need, a "for later" option, an abstraction with one user. Skip it.
-2. The repo already has it: a helper, hook, component, type, schema, or pattern. Reuse it.
-3. The project's design system or an installed dependency covers it. Use it; this wins over a native element or hand-rolled code the project does not use.
-4. The language, standard library, or platform covers it (a native input, CSS instead of JS, a DB constraint), and the project has no library or design-system component for it. Use it.
+2. The repo already has it: a helper, hook, component, type, schema, formatter, or pattern. Search for it, then reuse it.
+3. The project's design system or an installed dependency covers it. Use it; this wins over a native element or hand-rolled code the project does not use. Do not add a second library for something the repo already does.
+4. The language, standard library, or platform covers it (a native input, CSS instead of JS, a DB constraint, a URL parser), and the project has no library or design-system component for it. Use it.
 5. Only then write new code, the smallest that does the full job.
 
 Less code is the tiebreaker between options that do the same thing, never a reason to drop behavior. Keep every feature, edge case, error path, accessibility detail, and boundary validation the task needs. Do not add a dependency for something a few lines cover.
@@ -41,11 +38,11 @@ A special case is code that exists for one situation instead of following from h
 
 - An `if` for one specific value, ID, route, or caller
 - A parameter or flag only one caller understands, on a function others share
-- A swallowed exception, or a `catch` that returns a default to make an error go away
+- A `catch` that returns a default to make an error go away (see Errors and fallbacks)
 - A `setTimeout`, sleep, retry, or `requestAnimationFrame` that waits and hopes something is ready
 - A disabled, skipped, or loosened test to get green
 
-Before removing one, read its callers and `git blame` to learn why it exists; the reason may be an external constraint the code cannot show. Then fix the cause in the shared code so the special case is unnecessary. The fix makes the shared code general; moving the special case inward, as a branch or flag only one caller understands, is not a fix. If the cause is outside your scope, keep the special case, give it the one-line comment that names the external reason, and report it.
+Before removing one, read its callers and `git blame` to learn why it exists; the reason may be an external constraint the code cannot show. Then fix the cause in the shared code so the special case is unnecessary. Moving the special case inward, as a branch or flag only one caller understands, is not a fix. If the cause is outside your scope, keep the special case, give it the one-line comment that names the external reason, and report it.
 
 ## Errors and fallbacks
 
@@ -54,56 +51,49 @@ Before removing one, read its callers and `git blame` to learn why it exists; th
 - No fallback the spec did not ask for. A default, empty, or cached value returned on failure hides the failure. Never fall back to a mock, stub, or fake outside tests.
 - Do not let failures pass quietly: `?.` over a call that must run, a `catch` that only logs and continues, retries that run out without surfacing the error.
 - An error the user sees says what failed and what they can do next, through the project's error type.
-- Match the area's norm. Do not add try/catch or defensive checks where the surrounding code has none, or on a path that is already validated.
+- Do not add try/catch where the surrounding code has none.
 
 ## Workflow
 
-1. Detect the stack from the project (`package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `app.json`, `expo`, `@tanstack/*`). Use that project's package manager, design tokens, and check command.
-2. Scope: files you just wrote or edited this turn, named files, or unstaged/untracked work. Do not expand to siblings. If invoked by name with a clean tree and no files named, ask for a scope; do not sweep the repo. Whole-repo only if asked. Never edit staged files unless asked. Never edit generated output (`openapi/`, `*.gen.ts`, Prisma client, route types, lockfiles, protobuf stubs).
-3. Fix only what the sections below call out. Do not restyle or reorganize for taste; structural problems in existing code are reported, not reorganized (see Structure). In the touched files, search for string methods (`includes`, `indexOf`, `startsWith`, `endsWith`, `split`, `replace`) on values named like a URL, link, href, host, path, query, or email, and apply Parse structured strings.
-4. Prefer the smallest real contract. If a value is already known, do not add recursive guards for the typechecker.
-5. Check what you touched with that repo's command (typecheck, `cargo check`, package tests). Do not run the full test suite unless shared primitives / `utils/` changed, or the user asked. If a cleanup makes a test fail, the cleanup changed behavior: revert it or report it, do not edit the test to match.
-6. Explain in the conversation. If a fix is risky or you cannot prove it safe, report it instead of applying it. Do not write a summary document.
+1. Detect the stack from the project (`package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`). Use that project's package manager, design tokens, and check command.
+2. Scope: files you just wrote or edited this turn, named files, or unstaged/untracked work. Do not expand to siblings. If invoked by name with a clean tree and no files named, ask for a scope; do not sweep the repo. Whole-repo only if asked. Never edit staged files unless asked. Never edit generated output (OpenAPI clients, `*.gen.ts`, Prisma client, route types, lockfiles, protobuf stubs); if it is wrong, say so.
+3. Fix only what the sections below call out. Do not restyle or reorganize for taste; structural problems in existing code are reported, not reorganized (see Structure). In the touched files, search for string methods (`includes`, `indexOf`, `startsWith`, `split`, `replace`) on values that look like URLs, hosts, paths, queries, or emails, and for inline formatting of money or dates.
+4. Check what you touched with that repo's command (typecheck, `cargo check`, package tests). Do not run the full test suite unless shared primitives / `utils/` changed, or the user asked. If a cleanup makes a test fail, the cleanup changed behavior: revert it or report it, do not edit the test to match.
+5. Explain in the conversation. If a fix is risky or you cannot prove it safe, report it instead of applying it. Do not write a summary document.
 
 ## Hard constraints
 
-- No comments. The only exception is code a reader would otherwise break, such as a non-obvious workaround or an external constraint; then one short line. `SAFETY:` comments and comments that restate the code are never the exception. If a workaround needs a paragraph, it is the wrong workaround.
-- A comment that explains the implementation is restating it, even when phrased as a why (`// sort first so the binary search works`). Keep only comments about something outside the code that the code cannot show (`// the proxy drops websockets, so we poll`). When you change code, update or delete every comment the change makes wrong.
+- No comments. The only exception is something outside the code that the code cannot show, such as a non-obvious workaround or an external constraint (`// the proxy drops websockets, so we poll`); then one short line. A comment that explains the implementation is restating it, even when phrased as a why. `SAFETY:` comments are never the exception. If a workaround needs a paragraph, it is the wrong workaround.
+- When you change code, update or delete every comment the change makes wrong.
+- Do not "fix" import order, className order, or indentation.
 - Do not add blank lines between JSX siblings or between a parent and its children.
 - Do not introduce dynamic `import()` inside a component. Imports stay at the top of the file.
-- Do not "fix" import order, className order, or indentation.
-- Do not mass-rename `*Shape` types.
-- Do not rewrite existing Jest/Vitest mocks unless asked.
-- Do not chase every `{...(cond ? { x } : {})}` spread unless it is hiding a typing lie.
-- Do not extract a helper that is used once. Do not inline a shared helper that is already the project convention.
-
-JSX, `import()`, className, and `*Shape` bullets apply to JS/TS UI. Elsewhere keep no-comments, no one-use extract, no leftover rewrite; skip inapplicable bullets.
 
 ## Types
 
-Treat these as errors in **application** code. Generated files and third-party stubs (`.d.ts`, protobuf, generated clients) are out of scope. The table is TypeScript; in other languages reject the equivalent (silencing the checker, `Any` / `object` / `dyn`, force-unwrap to make it compile).
+Treat these as errors in **application** code. Generated files and third-party stubs are out of scope. The table is TypeScript; in other languages reject the equivalent (silencing the checker, `Any` / `object` / `dyn`, force-unwrap to make it compile).
 
 | Reject | Prefer |
 | --- | --- |
 | `as X as Y`, `as unknown as T` | Parse, narrow, or one real boundary type |
-| Widen to `unknown` / `any` / `object`, then `as T` | Keep the original type through the flow |
+| Widen to `unknown` / `any` / `object`, then `as T`; `data as T` after a typed client | Keep the original type through the flow |
 | `const m: Record<string, T> = { start: fn }` | Infer, `satisfies`, or a const map |
 | `fn(value: object)` / `Record<string, any \| unknown \| object>` | A named type or generic |
 | `fn(input: unknown): unknown`, `type Foo = unknown` | Typed contracts. `unknown` only at JSON / `catch` / untyped lib, then disappear |
 | `Reflect.apply` / `Reflect.get` | Typed call or parsed property |
 | Ad hoc `typeof` mid-feature | Schema / DTO at the edge. `typeof` is fine **inside** a type predicate |
-| `({ ... }) satisfies Partial<T> as T` | `z.input` empty values + `useForm<Input, unknown, Output>` or a typed factory |
+| `({ ... }) satisfies Partial<T> as T` | The schema's input type or a typed factory |
 | `@ts-ignore` / broad `eslint-disable` over a fixable error | Fix the cause. `@ts-expect-error` only at a real boundary |
+| `setTimeout(...) as unknown as number` | `ReturnType<typeof setTimeout>` |
+| Non-null `!` | A guard, or thread `T \| undefined` to where it is checked |
 
-`any` in production is always in scope.
+`any` in production is always in scope. Leave library generic slots, `catch (error)` into the project error helper, and mutable clones for native APIs (`[...values]`).
 
-**Timeout IDs:** `ReturnType<typeof setTimeout>`, never `as unknown as number`.
+## Validation weight
 
-**IDs in `queryFn`:** throw the project's error type, not a raw `new Error`, unless that is the repo convention.
+Parse untrusted input once at the boundary (HTTP body, `searchParams`, `JSON.parse`, local storage, route params, native callbacks) with the repo's existing validation library. After that, trust the typed value.
 
-**Non-null `!`:** guard, or thread `string | undefined` until `enabled: Boolean(id)`.
-
-Leave: library generic slots (`useForm<TField, unknown, TOutput>`), `catch (error)` into the project error helper, mutable clones for native APIs (`[...values]`), generated OpenAPI mismatches (report in chat; do not edit generated files).
+Reject recursive tree-walks, duplicate schemas for the same payload, refinements that repeat built-in checks, and field-by-field `typeof` after a schema already ran. Do not re-validate a branded ID or parsed form output as `unknown`, and do not add `?.` or `?? fallback` on values the types already guarantee.
 
 ## Duplication
 
@@ -111,9 +101,7 @@ Same non-trivial function, mapper, error throw, or fetch wrapper in two or more 
 
 Values and lists count too. The same constant, enum, or list of things (actions, routes, statuses, feature flags) kept in two places drifts: a keymap switch, a menu array, and a command palette list that each name the same actions. Derive them from one source. The same `switch` or if-chain on the same type in two places is the same problem: one map or model both read.
 
-Do not copy a local helper that already exists. Search before writing `formatDate`, `isRecord`, `toUserMessage`, `getHeaders`, or the equivalent.
-
-Short rules count too. A one-line normalisation, comparison, or format (`x.toLowerCase().includes(q.toLowerCase())`, `` `$${n}` ``) repeated across screens drifts just like a long helper: one copy trims and the next doesn't. When the same rule appears in three or more places, or must behave identically everywhere, make it one helper.
+Short rules count too. A one-line normalisation, comparison, or format (`x.toLowerCase().includes(q.toLowerCase())`, `` `$${n}` ``) repeated across screens drifts: one copy trims and the next doesn't. When the same rule appears in three or more places, or must behave identically everywhere, make it one helper.
 
 Do not "DRY" JSX that is similar but not the same. Two screens sharing a card is a component; two screens sharing a `<View className="gap-3">` is not.
 
@@ -121,46 +109,23 @@ Do not "DRY" JSX that is similar but not the same. Two screens sharing a card is
 
 Hardcoded theme values are slop when the repo already has tokens.
 
-- Colors: no hex / `rgb()` / `rgba()` / named CSS colors in app UI. Use `global.css` variables, Tailwind/Uniwind theme classes (`bg-card`, `text-primary`), or the project's JS token hook (`useCSSVariable('--color-primary')`, `theme.colors`, CSS `var(--*)`).
-- Same for radius, spacing, and font size when tokens exist (`rounded-xl`, `--radius-*`, `--text-2xs`). Do not sprinkle `14`, `#111`, or `borderRadius: 8` next to a tokenized system.
-- Icons and native props that need a string color still go through the token hook, not `'#000'`.
-- One-off brand colors in marketing that are not in the theme: add a token if the design system expects it; do not silently invent a new palette.
+- Colors: no hex / `rgb()` / `rgba()` / named CSS colors in app UI. Use the theme's CSS variables, theme classes (`bg-card`, `text-primary`), or the project's JS token hook. Icons and native props that need a string color go through the hook too.
+- Same for radius, spacing, and font size when tokens exist. Do not sprinkle `14`, `#111`, or `borderRadius: 8` next to a tokenized system.
+- A brand color the theme lacks: add a token if the design system expects it; do not invent a parallel palette.
 
-## Validation weight
-
-Parse untrusted input once at the boundary (HTTP body, `searchParams`, `JSON.parse`, MMKV, route params). After that, trust the typed value.
-
-Reject recursive tree-walks, duplicate Zod schemas for the same payload, `superRefine` that repeats `.min()`, and field-by-field `typeof` after a schema already ran.
-
-If the caller already passed a branded ID or form `z.output`, do not re-validate it as `unknown`. Same for `?.` and `?? fallback` on values the types already guarantee — defensive chaining is validation slop.
-
-## Parse structured strings
+## Strings and user-facing values
 
 URLs, paths, query strings, emails, dates, versions, MIME types, JSON, HTML, and CSV have parsers. Use the platform's or the project's, not `includes`, `indexOf`, `startsWith`, `split`, or `replace` on the raw string.
 
-- Check a host by comparing the parsed `hostname` to the domain or a `.domain` suffix. `link.includes('x.com')` also matches `netflix.com` and `evil.com/?x.com`.
-- Read and write queries with `URLSearchParams` or the language's URI type, not `split('&')` and template strings. Hand-splitting skips percent-decoding and drops or swallows the `#fragment`.
-- Route a "stays in the app" check through the repo's existing guard. `startsWith('/')` lets `//host` through to another origin.
-- Match a link or ID format you generate yourself with an anchored pattern of its exact shape, not `startsWith` plus `replace`.
-- A prefix regex ends at a boundary (`(?=[/?#]|$)`), so `/app` does not also match `/apps`.
-- Splitting is fine when the input is not always the structured type (a file name, a relative path, a value that may be a bare path or a full URL). Give it a one-line comment naming why.
+- Check a host by comparing the parsed `hostname` to the domain or a `.domain` suffix. `link.includes('x.com')` also matches `netflix.com`.
+- Read and write queries with `URLSearchParams` or the language's URI type. Hand-splitting skips percent-decoding and loses the `#fragment`.
+- A "stays in the app" check goes through the repo's existing guard. `startsWith('/')` lets `//host` through.
+- Match a link or ID format you generate yourself with an anchored pattern of its exact shape.
+- Splitting is fine when the input is not always the structured type (a file name, a value that may be a bare path or a full URL). Give it a one-line comment naming why.
 
-## Human data
+Human data does not follow the shape of your test data. Do not split a full name into first and last (a one-word name is valid), and do not slice phone numbers or addresses by position. Trim and ignore case when matching what a user typed.
 
-Names, addresses, phone numbers, and amounts don't follow the shape your test data has.
-
-- Do not split a full name into first and last. If a form needs both, ask for both. If you must prefill from one string, a one-word name goes into the first field, and both fields allow multi-word values.
-- Do not slice phone numbers or addresses by position. Use the project's phone library or keep the user's text.
-- Trim and ignore case when matching what a user typed (search, codes, emails). A trailing space should not hide every result.
-
-## Format in one place
-
-Money, counts, dates, durations, and file sizes shown to users go through one formatter per kind, with an explicit locale.
-
-- No inline `${symbol}${amount}`. It skips digit grouping, and the next screen will format it differently.
-- No bare `toLocaleString()` for anything that must look the same on every device. Pass the product's locale.
-- Before formatting inline, search for an existing formatter (`format*`, `*Label`). If two screens already format the same kind differently, merge them into one.
-- Check what the runtime actually supports. Some JS engines lack parts of `Intl`, such as plural rules. Follow the project's lint rules for what's missing instead of adding a polyfill.
+Money, counts, dates, durations, and file sizes shown to users go through one formatter per kind with an explicit locale. No inline `${symbol}${amount}`, and no bare `toLocaleString()` for anything that must look the same on every device.
 
 ## Readable code
 
@@ -178,13 +143,13 @@ Inline when a name adds no information:
 
 - `const isLoading = loading`
 - `const onPress = () => props.onPress()`
-- A 3-line function used once in the same file
+- A helper used once, especially a 3-line one in the same file
 - A new file for a component used once by one parent
 - `useMemo` / `useCallback` around a cheap value or a callback passed to a DOM node
 
-Keep a split when it is a real boundary: a repeated card, a schema module the form already uses, a hook with its own state/subscriptions.
+Keep a split when it is a real boundary: a repeated card, a schema module the form already uses, a hook with its own state/subscriptions. Do not inline a shared helper that is already the project convention, or one whose name explains a concept the caller would otherwise have to work out.
 
-Prefer one 40-line function over four 8-line functions that only exist to call each other. The reverse is not simpler either: do not merge unrelated logic into one function, and do not inline a helper whose name explains a concept the caller would otherwise have to work out.
+Prefer one 40-line function over four 8-line functions that only exist to call each other. The reverse is not simpler either: do not merge unrelated logic into one function.
 
 ## Structure
 
@@ -204,11 +169,10 @@ Apply these to code you write. In existing code you touch, fix a violation only 
 Delete what the compiler and the product no longer use:
 
 - Unused imports, variables, exports, props, state, effects, query results
-- Commented-out code, `TODO` that is already done, `FIXME` with a working path beside it
-- Stray debug `console.log`, comments that only restate the line below them
+- Commented-out code, `TODO` that is already done, `FIXME` with a working path beside it, stray debug `console.log`
 - Always-true / always-false flags, dead branches, old and new implementations kept "just in case"
 - Deprecated wrappers that only call the new function, and backwards-compatibility shims nothing calls
-- Traces of the change itself: `// new implementation`, `// changed from X`, `// removed`, variables renamed to `_unused` instead of deleted
+- Traces of the change itself: `// new implementation`, `// changed from X`, variables renamed to `_unused` instead of deleted
 - Unreachable defaults after a union is already exhaustive
 
 Before deleting an export, search the repo for the identifier — tests, native code, and string references (DI tokens, route names, dynamic keys) count, not just TS imports. Public APIs and fixtures stay unless proven dead.
@@ -222,8 +186,6 @@ Before deleting an export, search the repo for the identifier — tests, native 
 - Extra context/provider for a value used in one tree.
 - Pass-through components that add no markup, state, or behavior.
 - Abstractions for a hypothetical future use. An interface, abstract class, port, or DI token with one implementation is a hypothetical seam; with two (a test double counts), it is real.
-- New libraries for something the repo already does (another schema lib, another date lib, another toast).
-- Hand-rolled code for what the project's design system, an installed dependency, or the platform already does (a custom debounce, deep clone, or date math; a custom picker where the design system has one).
 
 ## React
 
@@ -234,26 +196,11 @@ Before deleting an export, search the repo for the identifier — tests, native 
 
 ## Tests you write
 
-A test should fail on a regression, and only then. Before adding or editing a test, read [tests.md](tests.md): name the break, no tests that can't fail or that repeat the implementation, no change detectors, mock only at system boundaries. Existing tests stay as they are unless you were asked to fix them.
-
-## Stack notes
-
-Use the repo's existing validation, tokens, and error types. Do not invent a new parsing library.
-
-If the repo is not one of these, map the row: boundary = untrusted input, interior = already-typed values. Use that language's checker and the project's parse, theme, and error types.
-
-| Stack | Boundary | Interior |
-| --- | --- | --- |
-| NestJS | DTO / Zod / `ValidationPipe` on controllers | Services take typed args. Share pipes/guards; do not copy them per module |
-| Next.js | `searchParams`, route handlers, `JSON.parse`, formData | Pages consume parsed types. Colors via CSS variables / Tailwind theme |
-| TanStack Query / Router | `queryFn` returns the resource; errors use the project error class | No `data as T` after a typed client. No duplicate query-key helpers |
-| Expo / RN | route params, MMKV/JSON, native callbacks | `className` + `useCSSVariable` for colors. Clone when a native API needs mutable arrays |
-| OpenAPI clients | trust generated types when they match | If the spec is wrong, say so — do not edit generated files |
+A test should fail on a regression, and only then. Before adding or editing a test, read [tests.md](tests.md). Existing tests and mocks stay as they are unless you were asked to fix them.
 
 ## Done when
 
-- Touched files have no new chained assertions, untyped contracts, special cases you could fix at the cause, swallowed errors or unrequested fallbacks, string-matched URLs, hosts, or queries, user-facing values formatted inline, human data (names, phones) parsed by position, copy-pasted helpers or lists, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
-- New code follows Readable code and Structure, and new tests follow [tests.md](tests.md).
+- Every section above holds for the touched files, and new tests follow [tests.md](tests.md).
 - The repo's check command passes for those files (ignore failures in files you were told not to touch).
 - The diff is smaller than the clever version.
 

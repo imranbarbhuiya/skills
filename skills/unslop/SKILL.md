@@ -113,6 +113,8 @@ Values and lists count too. The same constant, enum, or list of things (actions,
 
 Do not copy a local helper that already exists. Search before writing `formatDate`, `isRecord`, `toUserMessage`, `getHeaders`, or the equivalent.
 
+Short rules count too. A one-line normalisation, comparison, or format (`x.toLowerCase().includes(q.toLowerCase())`, `` `$${n}` ``) repeated across screens drifts just like a long helper: one copy trims and the next doesn't. When the same rule appears in three or more places, or must behave identically everywhere, make it one helper.
+
 Do not "DRY" JSX that is similar but not the same. Two screens sharing a card is a component; two screens sharing a `<View className="gap-3">` is not.
 
 ## Tokens, not literals
@@ -142,6 +144,23 @@ URLs, paths, query strings, emails, dates, versions, MIME types, JSON, HTML, and
 - Match a link or ID format you generate yourself with an anchored pattern of its exact shape, not `startsWith` plus `replace`.
 - A prefix regex ends at a boundary (`(?=[/?#]|$)`), so `/app` does not also match `/apps`.
 - Splitting is fine when the input is not always the structured type (a file name, a relative path, a value that may be a bare path or a full URL). Give it a one-line comment naming why.
+
+## Human data
+
+Names, addresses, phone numbers, and amounts don't follow the shape your test data has.
+
+- Do not split a full name into first and last. If a form needs both, ask for both. If you must prefill from one string, a one-word name goes into the first field, and both fields allow multi-word values.
+- Do not slice phone numbers or addresses by position. Use the project's phone library or keep the user's text.
+- Trim and ignore case when matching what a user typed (search, codes, emails). A trailing space should not hide every result.
+
+## Format in one place
+
+Money, counts, dates, durations, and file sizes shown to users go through one formatter per kind, with an explicit locale.
+
+- No inline `${symbol}${amount}`. It skips digit grouping, and the next screen will format it differently.
+- No bare `toLocaleString()` for anything that must look the same on every device. Pass the product's locale.
+- Before formatting inline, search for an existing formatter (`format*`, `*Label`). If two screens already format the same kind differently, merge them into one.
+- Check what the runtime actually supports. Some JS engines lack parts of `Intl`, such as plural rules. Follow the project's lint rules for what's missing instead of adding a polyfill.
 
 ## Readable code
 
@@ -233,7 +252,7 @@ If the repo is not one of these, map the row: boundary = untrusted input, interi
 
 ## Done when
 
-- Touched files have no new chained assertions, untyped contracts, special cases you could fix at the cause, swallowed errors or unrequested fallbacks, string-matched URLs, hosts, or queries, copy-pasted helpers or lists, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
+- Touched files have no new chained assertions, untyped contracts, special cases you could fix at the cause, swallowed errors or unrequested fallbacks, string-matched URLs, hosts, or queries, user-facing values formatted inline, human data (names, phones) parsed by position, copy-pasted helpers or lists, hardcoded theme literals, heavy validators, one-use wrappers, or dead leftovers you could prove unused.
 - New code follows Readable code and Structure, and new tests follow [tests.md](tests.md).
 - The repo's check command passes for those files (ignore failures in files you were told not to touch).
 - The diff is smaller than the clever version.

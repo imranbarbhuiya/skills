@@ -1,0 +1,5 @@
+interface:
+  display_name: "House Concept"
+  short_description: "Turn a family's house brief into a plan, 3D model, elevations and sections"
+policy:
+  allow_implicit_invocation: true

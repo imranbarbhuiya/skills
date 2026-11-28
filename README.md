@@ -1,6 +1,6 @@
 # skills
 
-Agent skills for cleaning up slop in application code, turning a rough brief into a plan folder, and proving what a change breaks before it ships.
+Agent skills for cleaning up slop in application code, turning a rough brief into a plan folder, proving what a change breaks before it ships, and turning a family's house brief into a concept design.
 
 [![skills.sh](https://skills.sh/b/imranbarbhuiya/skills)](https://skills.sh/imranbarbhuiya/skills)
 
@@ -9,6 +9,7 @@ Agent skills for cleaning up slop in application code, turning a rough brief int
 | `unslop` | Rules for clean application code: no low-evidence types, special-case patches, hidden failures, over-engineering, duplication, tangled structure, dead leftovers, hardcoded theme values, string-matched URLs, or tests that cannot fail. | [`skills/unslop`](skills/unslop) |
 | `grill-to-plan` | Grills you round by round, writes a plan folder with a numbered decision log and one file per task, then orchestrates subagents through it when you say start. | [`skills/grill-to-plan`](skills/grill-to-plan) |
 | `blast-radius` | Finds what a change breaks outside its diff, across callers, contracts and repos, and proves the fact it is safe because of by running real code. | [`skills/blast-radius`](skills/blast-radius) |
+| `house-concept` | Turns a house brief (a sketch, a plot size, a list of rooms) into a concept design app: plan, 3D walk-through, elevations, sections, site, structural grid brief and cost notes, from one design file, as a single HTML file. | [`skills/house-concept`](skills/house-concept) |
 
 ## Install
 
@@ -43,7 +44,7 @@ npx skills add https://github.com/imranbarbhuiya/skills
 npx skills add https://github.com/imranbarbhuiya/skills/tree/main/skills/unslop
 ```
 
-`unslop` and `blast-radius` are available for the agent to apply on its own: `unslop` while it writes and edits application code, `blast-radius` when you ask whether a change is safe and before it pushes a change to shared code, contracts, schemas, config or dependencies. `grill-to-plan` is explicit-only (`disable-model-invocation: true`); invoke it by name.
+`unslop` and `blast-radius` are available for the agent to apply on its own: `unslop` while it writes and edits application code, `blast-radius` when you ask whether a change is safe and before it pushes a change to shared code, contracts, schemas, config or dependencies. `house-concept` runs when you ask to design or lay out a house, or invoke `/house-concept`. `grill-to-plan` is explicit-only (`disable-model-invocation: true`); invoke it by name.
 
 ## unslop
 
@@ -97,6 +98,27 @@ skills/blast-radius/agents/openai.yaml
 ```
 
 Inspired by the [`blast-radius`](https://github.com/cursor/plugins/blob/main/pstack/skills/blast-radius/SKILL.md) skill in Cursor's pstack.
+
+## house-concept
+
+[![house-concept](https://skills.sh/b/imranbarbhuiya/skills?label=house-concept)](https://skills.sh/imranbarbhuiya/skills/house-concept)
+
+![house-concept: plan, 3D, roof-off view and elevation of the example courtyard house](skills/house-concept/examples/courtyard-house/tweet.png)
+
+Reads the brief and any sketch first, asks only what changes the geometry (plot and road side, rooms and baths, floors now and later, phasing, must-keeps), defaults the rest and lists the defaults, then builds from a working starter app. Every view comes from one design file, so moving a stair updates the plan, 3D, elevations, sections, site and structure together. Earlier layouts stay on an "Earlier options" tab for comparison.
+
+The output is a Vite + React + three.js project and one self-contained `dist/index.html` you can send to the family. It is a concept only: every sheet carries a disclaimer that a licensed architect and structural engineer do the final design, and the structure sheet is a brief for the engineer, not a design.
+
+```
+skills/house-concept/SKILL.md
+skills/house-concept/references/architecture.md    code map and recipes (inside stairs, light wells, spiral stairs)
+skills/house-concept/references/design-rules.md    room, stair, climate, structure and site rules of thumb
+skills/house-concept/assets/starter/               the starter app (example design: a courtyard house)
+skills/house-concept/scripts/new-project.sh        copy the starter and install it
+skills/house-concept/scripts/check-sheets.js       find text that runs off an SVG sheet
+skills/house-concept/examples/courtyard-house/     screenshots of the example
+skills/house-concept/agents/openai.yaml
+```
 
 ## Layout
 

@@ -16,8 +16,9 @@ floor (FFL). The origin is the house's outer south-west corner. three.js uses X 
 | `src/sheets/elevations.ts` | Four elevations from roofs, grid and outer openings | Rarely |
 | `src/sheets/sections.ts` | Sections cut along any x or y line | Rarely |
 | `src/sheets/siteStruct.ts` | Site plan and structural grid brief | Rarely |
-| `src/three/buildHouse.ts` | The 3D scene, walk-mode collisions, "Go to" spots | To add a 3D feature |
-| `src/three/House3D.tsx` | Orbit and walk modes, views, toggles, minimap, sun | Rarely |
+| `src/three/buildHouse.ts` | The 3D scene | To add a 3D feature |
+| `src/three/navigation.ts` | Walk mode: surfaces you can stand on (ground, steps, stair treads, landings, terrace), collision boxes with a height range, wall sliding, "You are in" readout, "Go to" spots | When you add something walkable or solid |
+| `src/three/House3D.tsx` | Orbit and walk modes (mouse-look, keys, touch joystick), views, toggles, ground and roof minimap, sun | Rarely |
 | `src/Notes.tsx`, `src/Options.tsx`, `src/App.tsx` | Tabs | Rarely |
 
 Views import from `model.ts`, never from `design/` directly.
@@ -72,7 +73,8 @@ Port these from a design that needed them; they are tested patterns, adapt names
 - Add a cabin over the well: walls 8′-6″ high on the roof, a door on the face where flight 2 arrives, a slab on top,
   and put the water tank on it. In plan, draw its outline dashed on the structure sheet; in elevations, a plastered
   box on the roof; in sections, its walls and slab where the cut crosses it. Leave a parapet gap where the cabin
-  wall replaces it.
+  wall replaces it. In walk mode, add the cabin walls to `buildNavBoxes` (in `src/three/navigation.ts`) as roof-level
+  boxes with a gap at the door, or the walker passes through them.
 - Something built under the stair (a utility or store under flight 2 and the landing): draw flight 2 and the landing
   dashed in plan, because they are above the cut plane. Headroom under flight 2 drops from about 9′ at its top end
   to the landing height minus the waist slab.
@@ -93,6 +95,27 @@ Port these from a design that needed them; they are tested patterns, adapt names
 - 3D: one wedge (`THREE.Shape` sector, `ExtrudeGeometry`, rotated flat) per tread, rotated about the pole, plus a
   helical handrail made of short rods. Slab opening: the square around the circle. Cabin: room to step off on the
   side where the last tread ends.
+- Walk mode: inside the circle and outside the pole, the tread under the walker is
+  `floor((angle − start) / step)` going round in the climbing direction, and its height is `(i + 1) × riser`. Because
+  one turn overlaps itself, return every tread height on that bearing (i and i + 16) as candidates and let the
+  nearest-to-feet rule pick. Add the pole and the outer handrail as collision boxes, and leave the rail open over the
+  bottom and top treads.
+
+### Walking stairs and the terrace
+
+`src/three/navigation.ts` keeps walk mode in step with the model; extend it whenever you add something walkable.
+
+- **Surfaces:** `surfaceCandidates(x, y)` lists every height you could stand on at that point: the ground, plinth and
+  porches, outer steps, each dog-leg tread and landing (from the stair's start, turn, risers and treads), and the
+  terrace slab except over courts and stair openings. The walker takes the candidate nearest its feet within 1.25′
+  (two risers), so it climbs one tread at a time and never jumps up to the roof from below.
+- **Blocks:** collision boxes carry `z0`–`z1` and only block between knee and head height, so a parapet stops you on
+  the terrace but not on the ground under it. Doorways (`door`, `open`, `slide`) are gaps.
+- **Stairs arriving:** an inside stair steps off onto the slab past its start end; an outside stair needs a `slabOnly`
+  bridge and an `openEdges` entry where flight 2 arrives. `check()` flags a stair that arrives on nothing or through a
+  parapet.
+- **New elements:** a cabin, a spiral, a light-well kerb or a raised deck each need a surface, a block, or both.
+  After adding one, walk onto it and off it in the browser.
 
 ### High glass band along a corridor
 

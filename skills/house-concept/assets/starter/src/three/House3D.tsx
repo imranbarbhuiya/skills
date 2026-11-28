@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { BBOX, FLOOR, FLOORS_TOTAL, HOUSE, MODEL, PLOT, SITE } from "../model";
-import { HouseLayers, buildHouse, floorAt, navBlocks, navBlocksRoof, places } from "./buildHouse";
+import { BBOX, FLOOR, FLOORS_TOTAL, HOUSE, MODEL, MODEL_P1, PLOT, SITE, STAIRS, STAIR_WELLS, parapetRect, roofEdges } from "../model";
+import type { Rect } from "../types";
+import { HouseLayers, buildHouse } from "./buildHouse";
+import { EYE_HEIGHT, LocationInfo, Place, WalkState, findFreeSpot, floorHeightAt, getPlaces, roomAt, stepWalker } from "./navigation";
 
 type Vec = [number, number, number];
 interface Preset { name: string; pos: Vec; target: Vec; roof?: boolean; hint: string }
@@ -34,29 +36,49 @@ interface Api {
   goTo: (p: Preset) => void;
   apply: (t: Toggles, sun: number) => void;
   setMode: (m: Mode) => void;
-  walkTo: (x: number, y: number, lookX?: number, lookY?: number, level?: number) => void;
+  walkTo: (x: number, y: number, lookX?: number, lookY?: number, level?: 0 | 1) => void;
   snap: () => void;
   focus: (x: number, y: number) => void;
-  hold: (k: string, down: boolean) => void;
+  setJoy: (strafe: number, forward: number) => void;
+  requestLock: () => void;
 }
 
-const EYE = 5.25;
-const R = 0.9; // walker radius
+const WALK_SPEED = 7.5; // ft/s
+const RUN_MULT = 2;
+const inPlot = (x: number, y: number, m = 2) => x > PLOT.x0 + m && x < PLOT.x1 - m && y > PLOT.y0 + m && y < PLOT.y1 - m;
+const inHouse = (x: number, y: number) => x > BBOX.x0 && x < BBOX.x1 && y > BBOX.y0 && y < BBOX.y1;
+const union = (rs: Rect[]): Rect => rs.reduce((a, r) => ({ x0: Math.min(a.x0, r.x0), y0: Math.min(a.y0, r.y0), x1: Math.max(a.x1, r.x1), y1: Math.max(a.y1, r.y1) }));
+const grow = (r: Rect, m: number): Rect => ({ x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m });
+/** minimap extents: the house with its stairs, porches and steps, or the whole plot */
+const MINI = {
+  house: grow(union([BBOX, ...STAIRS.map((d) => d.well), ...HOUSE.porches, ...HOUSE.steps.map((s) => s.r)]), 5),
+  plot: grow(PLOT, 4),
+};
 
 export function House3D() {
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<Api | null>(null);
   const marker = useRef<SVGGElement>(null);
+  const viewRef = useRef<HTMLDivElement>(null);
+  const joyPadRef = useRef<HTMLDivElement>(null);
+  const joyKnobRef = useRef<HTMLDivElement>(null);
   const [t, setT] = useState<Toggles>({ roof: true, furniture: true, ghost: false, labels: true, shadows: true, noclip: false, phase2: true });
   const [sun, setSun] = useState(10.5);
   const [active, setActive] = useState(PRESETS[0].name);
   const [mode, setModeState] = useState<Mode>("orbit");
+  const [locked, setLocked] = useState(false);
   const [help, setHelp] = useState(true);
   const [tour, setTour] = useState(false);
-  const viewRef = useRef<HTMLDivElement>(null);
-  const spots = useMemo(() => places(), []);
+  const [miniScope, setMiniScope] = useState<keyof typeof MINI>("house");
+  const [loc, setLoc] = useState<LocationInfo>({ room: "", level: "", onRoof: false });
+  const [isTouch, setIsTouch] = useState(() => window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0);
+  const [panelsOpen, setPanelsOpen] = useState(true);
+  const allSpots = useMemo(() => getPlaces(), []);
+  const spots = useMemo(() => allSpots.filter((p) => t.phase2 || !p.phase2), [allSpots, t.phase2]);
   const tRef = useRef(t);
   tRef.current = t;
+  const spotsRef = useRef(spots);
+  spotsRef.current = spots;
 
   useEffect(() => {
     const el = host.current!;
@@ -98,7 +120,6 @@ export function House3D() {
 
     const layers: HouseLayers = buildHouse();
     for (const g of Object.values(layers)) scene.add(g);
-    const blocks = [navBlocks(true), navBlocksRoof()];
 
     const resize = () => {
       const w = el.clientWidth, h = el.clientHeight;
@@ -120,107 +141,200 @@ export function House3D() {
     controls.target.set(...PRESETS[0].target);
 
     // ---------------- walk state (plan coords)
-    const walk = { x: 0, y: 0, yaw: 0, pitch: -0.05, z: EYE, level: 0 };
+    const walk: WalkState = { x: 0, y: 0, footZ: 0, eyeZ: EYE_HEIGHT, yaw: 0, pitch: -0.05 };
+    let walkStarted = false;
+    /** the orbit pivot set when walk mode was left: if it is still there, F resumes where you stood */
+    let leftAt: THREE.Vector3 | null = null;
+    let vel = { x: 0, y: 0 };
+    const joy = { s: 0, f: 0 };
     const keys = new Set<string>();
     let mode: Mode = "orbit";
-    const blocked = (x: number, y: number) => {
-      if (tRef.current.noclip) return false;
-      for (const b of blocks[walk.level]) {
-        const cx = Math.max(b.x0, Math.min(x, b.x1)), cy = Math.max(b.y0, Math.min(y, b.y1));
-        if ((x - cx) ** 2 + (y - cy) ** 2 < R * R) return true;
-      }
-      return false;
+    let shadows = true;
+    let lastLoc = "";
+    let lockLostAt = 0;
+    const cv = renderer.domElement;
+    const dir = new THREE.Vector3();
+
+    const exitLock = () => { if (document.pointerLockElement === cv) document.exitPointerLock(); };
+    const requestLock = () => {
+      if (mode !== "walk" || document.pointerLockElement === cv) return;
+      // refused under automation or without a user gesture; drag-to-look still works
+      cv.requestPointerLock()?.catch(() => {});
     };
-    const free = (x: number, y: number) => {
-      if (!blocked(x, y)) return [x, y];
-      for (let r = 0.5; r < 6; r += 0.5) for (let a = 0; a < 16; a++) {
-        const nx = x + r * Math.cos((a / 16) * Math.PI * 2), ny = y + r * Math.sin((a / 16) * Math.PI * 2);
-        if (!blocked(nx, ny)) return [nx, ny];
-      }
-      return [x, y];
+    const syncLocation = (force = false) => {
+      const info = roomAt(walk.x, walk.y, walk.footZ, tRef.current.phase2);
+      const key = `${info.room}|${info.level}`;
+      if (force || key !== lastLoc) { lastLoc = key; setLoc(info); }
     };
-    const walkTo = (x: number, y: number, lx?: number, ly?: number, level?: number) => {
-      const onRoof = x > BBOX.x0 + 0.5 && x < BBOX.x1 - 0.5 && y > BBOX.y0 + 0.5 && y < BBOX.y1 - 0.5;
-      walk.level = level ?? (walk.level === 1 && onRoof ? 1 : 0);
-      [walk.x, walk.y] = free(x, y);
+    const placeCamera = () => {
+      camera.position.set(walk.x, walk.eyeZ, -walk.y);
+      const cp = Math.cos(walk.pitch);
+      camera.lookAt(walk.x + Math.cos(walk.yaw) * cp, walk.eyeZ + Math.sin(walk.pitch), -(walk.y + Math.sin(walk.yaw) * cp));
+    };
+    /** stand on the nearest free spot to (x, y) at ground (0) or roof level */
+    const standAt = (x: number, y: number, roof: boolean) => {
+      [walk.x, walk.y, walk.footZ] = findFreeSpot(x, y, roof ? FLOOR : 0, tRef.current.phase2);
+      walk.eyeZ = walk.footZ + EYE_HEIGHT;
+      vel = { x: 0, y: 0 };
+      walkStarted = true;
+    };
+    const enterWalk = () => {
+      mode = "walk";
+      anim = null;
+      controls.enabled = false;
+      placeCamera();
+      syncLocation(true);
+      setModeState("walk");
+    };
+    const walkTo = (x: number, y: number, lx?: number, ly?: number, level?: 0 | 1) => {
+      standAt(x, y, level === 1 || (level === undefined && walk.footZ >= FLOOR - 1 && inHouse(x, y)));
       if (lx !== undefined && ly !== undefined) walk.yaw = Math.atan2(ly - walk.y, lx - walk.x);
       walk.pitch = -0.05;
-      walk.z = floorAt(walk.x, walk.y, walk.level) + EYE;
-      setMode("walk");
+      enterWalk();
+    };
+    /**
+     * Orbit → walk: resume where you left if the view has not moved, else stand under a close camera, at a roof
+     * target, or at the first "Go to" spot. The orbit target's height says whether you were looking at the roof.
+     */
+    const placeFromOrbit = () => {
+      const cam = camera.position, tg = controls.target;
+      if (walkStarted && leftAt && tg.distanceTo(leftAt) < 1) return;
+      camera.getWorldDirection(dir);
+      const yaw = Math.atan2(-dir.z, dir.x);
+      const onRoof = tRef.current.roof && tg.y >= FLOOR - 1.5;
+      if (inPlot(cam.x, -cam.z) && cam.distanceTo(tg) < 28 && cam.y < FLOOR + 14) {
+        standAt(cam.x, -cam.z, onRoof);
+        walk.yaw = yaw;
+        walk.pitch = Math.max(-0.8, Math.min(0.6, Math.asin(Math.max(-1, Math.min(1, dir.y)))));
+      } else if (inPlot(tg.x, -tg.z) && onRoof) {
+        standAt(tg.x, -tg.z, true);
+        walk.yaw = yaw;
+        walk.pitch = -0.05;
+      } else if (!walkStarted) {
+        const first = spotsRef.current[0];
+        standAt(first.at[0], first.at[1], first.level === 1);
+        walk.yaw = Math.atan2(first.look[1] - walk.y, first.look[0] - walk.x);
+        walk.pitch = -0.05;
+      }
     };
     const setMode = (m: Mode) => {
       if (m === mode) return;
-      mode = m;
-      controls.enabled = m === "orbit";
+      anim = null;
+      vel = { x: 0, y: 0 };
+      keys.clear();
+      joy.s = joy.f = 0;
       if (m === "orbit") {
-        const fwd = new THREE.Vector3(Math.cos(walk.yaw), 0, -Math.sin(walk.yaw));
-        controls.target.copy(camera.position).add(fwd.multiplyScalar(12));
-        controls.target.y = Math.max(0, camera.position.y - 1);
-      } else if (walk.x === 0 && walk.y === 0) {
-        const first = spots[0];
-        walkTo(first.at[0], first.at[1], first.look[0], first.look[1]);
+        exitLock();
+        mode = "orbit";
+        controls.enabled = true;
+        // pull back from where you stood, so the orbit pivots there
+        const fx = Math.cos(walk.yaw), fy = Math.sin(walk.yaw);
+        const tgt = new THREE.Vector3(walk.x + fx * 3, Math.max(0, walk.footZ + 2.5), -(walk.y + fy * 3));
+        controls.target.copy(tgt);
+        leftAt = tgt.clone();
+        animateTo(new THREE.Vector3(walk.x - fx * 14, walk.footZ + EYE_HEIGHT + 8, -(walk.y - fy * 14)), tgt);
+        setModeState("orbit");
+        return;
       }
-      setModeState(m);
+      placeFromOrbit();
+      enterWalk();
     };
     const focus = (x: number, y: number) => {
-      if (mode === "walk") { walkTo(x, y, x + Math.cos(walk.yaw), y + Math.sin(walk.yaw)); return; }
-      const tgt = new THREE.Vector3(x, floorAt(x, y) + 2, -y);
+      if (mode === "walk") {
+        walkTo(x, y, x + Math.cos(walk.yaw), y + Math.sin(walk.yaw), walk.footZ >= FLOOR - 1 && tRef.current.roof ? 1 : 0);
+        return;
+      }
+      const tgt = new THREE.Vector3(x, floorHeightAt(x, y, tRef.current.phase2) + 2, -y);
       const off = camera.position.clone().sub(controls.target);
-      const dist = Math.min(off.length(), 45);
-      animateTo(tgt.clone().add(off.normalize().multiplyScalar(dist)), tgt);
+      animateTo(tgt.clone().add(off.normalize().multiplyScalar(Math.min(off.length(), 45))), tgt);
     };
 
-    // ---------------- input
+    // ---------------- input: keys, pointer-lock mouse-look, drag-to-look, wheel, double-click
+    const MOVE_KEYS = ["w", "a", "s", "d", "q", "e", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift"];
     const onKey = (e: KeyboardEvent, down: boolean) => {
-      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      // a focused checkbox still lets you walk; text fields and the sun slider keep their keys
+      const el = e.target as HTMLInputElement | null;
+      if (el?.tagName === "TEXTAREA" || (el?.tagName === "INPUT" && el.type !== "checkbox")) return;
       const k = e.key.toLowerCase();
-      if (down && k === "f") { setMode(mode === "walk" ? "orbit" : "walk"); return; }
+      if (down && k === "f") { e.preventDefault(); setMode(mode === "walk" ? "orbit" : "walk"); return; }
       if (mode !== "walk") return;
-      if (["w", "a", "s", "d", "q", "e", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift"].includes(k)) {
+      // the first Esc only releases mouse-look (the browser does that); the next one leaves walk mode
+      if (down && k === "escape") { if (document.pointerLockElement !== cv && performance.now() - lockLostAt > 250) setMode("orbit"); return; }
+      if (MOVE_KEYS.includes(k)) {
         e.preventDefault();
         if (down) keys.add(k); else keys.delete(k);
       }
     };
     const kd = (e: KeyboardEvent) => onKey(e, true), ku = (e: KeyboardEvent) => onKey(e, false);
+    const onBlur = () => { keys.clear(); joy.s = joy.f = 0; };
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
-    let drag: { x: number; y: number } | null = null;
-    const cv = renderer.domElement;
-    const onDown = (e: PointerEvent) => { if (mode === "walk") { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); } };
-    const onMove = (e: PointerEvent) => {
-      if (mode !== "walk" || !drag) return;
-      walk.yaw -= (e.clientX - drag.x) * 0.004;
-      walk.pitch = Math.max(-1.2, Math.min(1.2, walk.pitch - (e.clientY - drag.y) * 0.004));
-      drag = { x: e.clientX, y: e.clientY };
+    window.addEventListener("blur", onBlur);
+    const onLockChange = () => {
+      const on = document.pointerLockElement === cv;
+      setLocked(on);
+      if (!on) { keys.clear(); lockLostAt = performance.now(); }
     };
-    const onUp = () => { drag = null; };
+    document.addEventListener("pointerlockchange", onLockChange);
+    const look = (dx: number, dy: number, k: number) => {
+      walk.yaw -= dx * k;
+      walk.pitch = Math.max(-1.35, Math.min(1.35, walk.pitch - dy * k));
+    };
+    const onMouseMove = (e: MouseEvent) => {
+      if (mode === "walk" && document.pointerLockElement === cv) look(Math.max(-120, Math.min(120, e.movementX)), Math.max(-120, Math.min(120, e.movementY)), 0.0024);
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    // drag to look (touch, or a mouse without pointer lock); a click without a drag asks for mouse-look
+    let drag: { id: number; x: number; y: number; sx: number; sy: number; moved: boolean; touch: boolean } | null = null;
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "touch") setIsTouch(true);
+      if (mode !== "walk" || document.pointerLockElement === cv || drag) return;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false, touch: e.pointerType === "touch" };
+      cv.setPointerCapture(e.pointerId);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (mode !== "walk" || !drag || drag.id !== e.pointerId) return;
+      if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 5) drag.moved = true;
+      look(e.clientX - drag.x, e.clientY - drag.y, drag.touch ? 0.005 : 0.0038);
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!drag || drag.id !== e.pointerId) return;
+      const click = !drag.touch && !drag.moved && e.button === 0;
+      drag = null;
+      if (click) requestLock();
+    };
     const onWheel = (e: WheelEvent) => {
       if (mode !== "walk") return;
       e.preventDefault();
-      step(Math.cos(walk.yaw) * -e.deltaY * 0.02, Math.sin(walk.yaw) * -e.deltaY * 0.02);
+      const d = Math.max(-2.5, Math.min(2.5, -e.deltaY * 0.015));
+      stepWalker(walk, Math.cos(walk.yaw) * d, Math.sin(walk.yaw) * d, tRef.current.phase2, tRef.current.noclip);
+      syncLocation();
     };
     const raycaster = new THREE.Raycaster();
     const onDbl = (e: MouseEvent) => {
+      if (document.pointerLockElement === cv) return;
       const r = cv.getBoundingClientRect();
       raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-      const hit = raycaster.intersectObjects([layers.site, layers.house, ...(tRef.current.phase2 ? [layers.p2House] : []), ...(tRef.current.roof ? [layers.roof] : [])], true)[0];
+      const tg = tRef.current;
+      const hit = raycaster.intersectObjects([layers.site, layers.house, ...(tg.phase2 ? [layers.p2House] : []), ...(tg.roof ? [layers.roof, ...(tg.phase2 ? [layers.p2Roof] : [])] : [])], true)[0];
       if (!hit) return;
-      if (mode === "walk") { walkTo(hit.point.x, -hit.point.z, hit.point.x + Math.cos(walk.yaw), -hit.point.z + Math.sin(walk.yaw)); return; }
+      if (mode === "walk") {
+        walkTo(hit.point.x, -hit.point.z, hit.point.x + Math.cos(walk.yaw), -hit.point.z + Math.sin(walk.yaw), hit.point.y >= FLOOR - 1 && tg.roof ? 1 : 0);
+        return;
+      }
       const tgt = hit.point.clone();
-      const off = camera.position.clone().sub(controls.target).multiplyScalar(0.55);
-      animateTo(tgt.clone().add(off), tgt);
+      animateTo(tgt.clone().add(camera.position.clone().sub(controls.target).multiplyScalar(0.55)), tgt);
     };
+    const stopTour = () => window.dispatchEvent(new CustomEvent("house-stop-tour"));
     cv.addEventListener("pointerdown", onDown);
     cv.addEventListener("pointermove", onMove);
     cv.addEventListener("pointerup", onUp);
+    cv.addEventListener("pointercancel", onUp);
     cv.addEventListener("wheel", onWheel, { passive: false });
     cv.addEventListener("dblclick", onDbl);
-
-    const step = (dx: number, dy: number) => {
-      const nx = walk.x + dx, ny = walk.y + dy;
-      if (!blocked(nx, walk.y)) walk.x = nx;
-      if (!blocked(walk.x, ny)) walk.y = ny;
-    };
+    cv.addEventListener("pointerdown", stopTour);
 
     const apply = (tg: Toggles, hour: number) => {
       layers.roof.visible = tg.roof;
@@ -233,18 +347,26 @@ export function House3D() {
       layers.p1Only.visible = !tg.phase2 && tg.roof;
       // CSS2D labels ignore their parent's visibility, so hide phase 2's labels one by one
       for (const c of layers.p2Labels.children) c.visible = tg.phase2;
-      blocks[0] = navBlocks(tg.phase2);
-      renderer.shadowMap.enabled = tg.shadows;
-      sunLight.castShadow = tg.shadows;
-      scene.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; });
+      if (tg.shadows !== shadows) {
+        shadows = tg.shadows;
+        renderer.shadowMap.enabled = tg.shadows;
+        sunLight.castShadow = tg.shadows;
+        scene.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m) m.needsUpdate = true; });
+      }
       const f = (hour - 6) / 12;
       const az = (90 + 180 * f) * (Math.PI / 180);
       const el_ = Math.max(4, 68 * Math.sin(Math.PI * f)) * (Math.PI / 180);
       const d = 240;
       sunLight.position.set(C[0] + d * Math.sin(az) * Math.cos(el_), d * Math.sin(el_), C[2] - d * Math.cos(az) * Math.cos(el_));
       sunLight.intensity = 0.6 + 2.0 * Math.sin(Math.PI * Math.min(Math.max(f, 0), 1));
+      if (mode === "walk") {
+        // phase 2 may have taken away the floor or put a wall where you stand: move to the nearest free spot
+        const z = walk.footZ;
+        [walk.x, walk.y, walk.footZ] = findFreeSpot(walk.x, walk.y, z, tg.phase2);
+        if (walk.footZ !== z) walk.eyeZ = walk.footZ + EYE_HEIGHT;
+        syncLocation(true);
+      }
     };
-    const hold = (k: string, down: boolean) => { if (down) keys.add(k); else keys.delete(k); };
     const snap = () => {
       renderer.render(scene, camera);
       const a = document.createElement("a");
@@ -252,9 +374,11 @@ export function House3D() {
       a.download = `house-3d-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
       a.click();
     };
-    const stopTour = () => window.dispatchEvent(new CustomEvent("house-stop-tour"));
-    cv.addEventListener("pointerdown", stopTour);
-    api.current = { goTo: (p) => { setMode("orbit"); animateTo(new THREE.Vector3(...p.pos), new THREE.Vector3(...p.target)); }, apply, setMode, walkTo, focus, hold, snap };
+    api.current = {
+      goTo: (p) => { setMode("orbit"); animateTo(new THREE.Vector3(...p.pos), new THREE.Vector3(...p.target)); },
+      apply, setMode, walkTo, focus, snap, requestLock,
+      setJoy: (s, f) => { joy.s = s; joy.f = f; },
+    };
 
     // ---------------- loop
     let raf = 0, last = performance.now();
@@ -264,21 +388,25 @@ export function House3D() {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (mode === "walk") {
-        const run = keys.has("shift") ? 2.2 : 1;
-        const sp = 9 * run * dt, tr = 1.8 * dt;
-        let f = 0, s = 0;
+        let f = joy.f, s = -joy.s; // s > 0 strafes left
         if (keys.has("w") || keys.has("arrowup")) f += 1;
         if (keys.has("s") || keys.has("arrowdown")) f -= 1;
-        if (keys.has("a")) s += 1;
-        if (keys.has("d")) s -= 1;
-        if (keys.has("arrowleft") || keys.has("q")) walk.yaw += tr;
-        if (keys.has("arrowright") || keys.has("e")) walk.yaw -= tr;
-        if (f || s) step((Math.cos(walk.yaw) * f - Math.sin(walk.yaw) * s) * sp, (Math.sin(walk.yaw) * f + Math.cos(walk.yaw) * s) * sp);
-        const targetZ = floorAt(walk.x, walk.y, walk.level) + EYE;
-        walk.z += (targetZ - walk.z) * Math.min(1, dt * 8);
-        camera.position.set(walk.x, walk.z, -walk.y);
-        const cp = Math.cos(walk.pitch);
-        camera.lookAt(walk.x + Math.cos(walk.yaw) * cp, walk.z + Math.sin(walk.pitch), -(walk.y + Math.sin(walk.yaw) * cp));
+        if (keys.has("a") || keys.has("arrowleft")) s += 1;
+        if (keys.has("d") || keys.has("arrowright")) s -= 1;
+        if (keys.has("q")) walk.yaw += 1.9 * dt;
+        if (keys.has("e")) walk.yaw -= 1.9 * dt;
+        const mag = Math.hypot(f, s);
+        if (mag > 1) { f /= mag; s /= mag; }
+        const speed = WALK_SPEED * (keys.has("shift") ? RUN_MULT : 1);
+        const k = 1 - Math.exp(-18 * dt);
+        vel.x += ((Math.cos(walk.yaw) * f - Math.sin(walk.yaw) * s) * speed - vel.x) * k;
+        vel.y += ((Math.sin(walk.yaw) * f + Math.cos(walk.yaw) * s) * speed - vel.y) * k;
+        if (Math.hypot(vel.x, vel.y) > 0.02) {
+          stepWalker(walk, vel.x * dt, vel.y * dt, tRef.current.phase2, tRef.current.noclip);
+          syncLocation();
+        }
+        walk.eyeZ += (walk.footZ + EYE_HEIGHT - walk.eyeZ) * (1 - Math.exp(-15 * dt));
+        placeCamera();
       } else {
         if (anim) {
           const k = Math.min(1, (now - anim.t0) / 900);
@@ -298,7 +426,6 @@ export function House3D() {
       const mk = marker.current;
       if (mk) {
         const px = mode === "walk" ? walk.x : camera.position.x, py = mode === "walk" ? walk.y : -camera.position.z;
-        const dir = new THREE.Vector3();
         camera.getWorldDirection(dir);
         const ang = (Math.atan2(-dir.z, dir.x) * 180) / Math.PI;
         mk.setAttribute("transform", `translate(${px.toFixed(2)} ${(-py).toFixed(2)}) rotate(${(-ang).toFixed(1)})`);
@@ -308,8 +435,12 @@ export function House3D() {
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      exitLock();
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("pointerlockchange", onLockChange);
+      document.removeEventListener("mousemove", onMouseMove);
       controls.dispose();
       renderer.dispose();
       scene.traverse((o) => { (o as THREE.Mesh).geometry?.dispose?.(); });
@@ -344,13 +475,44 @@ export function House3D() {
     else if (p.roof === undefined && !t.roof) setT({ ...t, roof: true });
     api.current?.goTo(p);
   };
+  const goToPlace = (p: Place) => {
+    setTour(false);
+    if (p.level === 1 && !t.roof) setT({ ...t, roof: true });
+    api.current?.walkTo(p.at[0], p.at[1], p.look[0], p.look[1], p.level ?? 0);
+  };
   const tog = (k: keyof Toggles) => setT({ ...t, [k]: !t[k] });
   const hourLabel = `${Math.floor(sun)}:${String(Math.round((sun % 1) * 60)).padStart(2, "0")}`;
 
-  // minimap geometry (plan coords, y flipped by the svg transform)
-  const mm = { x0: PLOT.x0 - 4, x1: PLOT.x1 + 4, y0: PLOT.y0 - 4, y1: PLOT.y1 + 4 };
-  // fit the plot into 288 × 190 px whatever its shape
-  const mmK = Math.min(288 / (mm.x1 - mm.x0), 190 / (mm.y1 - mm.y0));
+  // touch joystick: drag the knob to walk, drag the view to look
+  const joyPid = useRef<number | null>(null);
+  const updateJoy = (clientX: number, clientY: number) => {
+    const pad = joyPadRef.current, knob = joyKnobRef.current;
+    if (!pad || !knob) return;
+    const r = pad.getBoundingClientRect(), maxR = r.width * 0.36;
+    let dx = clientX - (r.left + r.width / 2), dy = clientY - (r.top + r.height / 2);
+    const d = Math.hypot(dx, dy);
+    if (d > maxR) { dx *= maxR / d; dy *= maxR / d; }
+    knob.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+    api.current?.setJoy(dx / maxR, -dy / maxR);
+  };
+  const joyHandlers = {
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      joyPid.current = e.pointerId;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      updateJoy(e.clientX, e.clientY);
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => { if (joyPid.current === e.pointerId) updateJoy(e.clientX, e.clientY); },
+    onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => {
+      if (joyPid.current !== e.pointerId) return;
+      joyPid.current = null;
+      if (joyKnobRef.current) joyKnobRef.current.style.transform = "";
+      api.current?.setJoy(0, 0);
+    },
+  };
+
+  // minimap (plan coords, y flipped by the svg transform); on the roof it shows the roof plan
+  const mm = MINI[miniScope];
   const onMini = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = e.currentTarget;
     const pt = svg.createSVGPoint();
@@ -358,48 +520,65 @@ export function House3D() {
     const p = pt.matrixTransform(svg.getScreenCTM()!.inverse());
     api.current?.focus(p.x, -p.y);
   };
-  const hold = (k: string) => ({
-    onPointerDown: (e: React.PointerEvent) => { e.preventDefault(); api.current?.hold(k, true); },
-    onPointerUp: () => api.current?.hold(k, false),
-    onPointerLeave: () => api.current?.hold(k, false),
-  });
+  const model = t.phase2 ? MODEL : MODEL_P1;
+  const roofMap = mode === "walk" && loc.onRoof;
+  const cone = miniScope === "house" ? 0.65 : 1;
+  const R = (r: Rect, fill: string, extra: React.SVGProps<SVGRectElement> = {}) => <rect x={r.x0} y={-r.y1} width={r.x1 - r.x0} height={r.y1 - r.y0} fill={fill} {...extra} />;
+  const treads = STAIRS.flatMap((d) => d.treads).map((s, i) => <g key={`t${i}`}>{R(s.r, "#d7c8ae", { stroke: "#8c7a5b", strokeWidth: 0.12 })}</g>);
 
   return (
-    <div className="view3d" ref={viewRef}>
-      <div ref={host} className="canvas-host" />
-      <div className="hud hud-left">
-        <div className="seg">
-          <button className={mode === "orbit" ? "on" : ""} onClick={() => api.current?.setMode("orbit")}>Orbit</button>
-          <button className={mode === "walk" ? "on" : ""} onClick={() => api.current?.setMode("walk")}>Walk inside</button>
+    <div className={`view3d${isTouch ? " is-touch" : ""}`} ref={viewRef}>
+      <div ref={host} className={`canvas-host${mode === "walk" ? " walk-cursor" : ""}`} />
+      {mode === "walk" && locked && <div className="crosshair" aria-hidden="true" />}
+      {mode === "walk" && (
+        <div className="walk-bar" role="status" aria-live="polite">
+          <div className="walk-loc">
+            <span className="walk-loc-prefix">You are in:</span>
+            <strong>{loc.room}</strong>
+            <span className="walk-loc-lvl">{loc.level}</span>
+          </div>
+          {!isTouch && !locked && <button className="walk-lock-btn" onClick={() => api.current?.requestLock()}>Mouse-look</button>}
+          <button className="walk-exit-btn" onClick={() => api.current?.setMode("orbit")}>Exit walk (F)</button>
         </div>
-        <div className="hud-title">Go to</div>
-        <div className="goto">
-          {spots.map((p) => (
-            <button key={p.name} className="chip" onClick={() => { setTour(false); api.current?.walkTo(p.at[0], p.at[1], p.look[0], p.look[1], p.level ?? 0); }}>{p.name}</button>
-          ))}
-        </div>
-        <div className="hud-title" style={{ marginTop: 8 }}>Views</div>
-        {PRESETS.map((p) => (
-          <button key={p.name} className={mode === "orbit" && active === p.name ? "chip on" : "chip"} onClick={() => { setTour(false); pick(p); }} title={p.hint}>{p.name}</button>
-        ))}
-      </div>
-      <div className="hud hud-right">
-        <div className="hud-title">Show</div>
-        {([...(HOUSE.phase2 ? [["phase2", "Phase 2"]] : []), ["roof", "Roof & terrace"], ["furniture", "Furniture"], ...(FLOORS_TOTAL > 1 ? [["ghost", `Future floors (G+${FLOORS_TOTAL - 1})`]] : []),
-          ["labels", "Room labels (roof off)"], ["shadows", "Sun shadows"], ["noclip", "Walk through walls"]] as [keyof Toggles, string][]).map(([k, lab]) => (
-          <label key={k} className="tog"><input type="checkbox" checked={t[k]} onChange={() => tog(k)} />{lab}</label>
-        ))}
-        <div className="hud-title" style={{ marginTop: 10 }}>Sun · {hourLabel}</div>
-        <input type="range" min={6.5} max={17.5} step={0.25} value={sun} onChange={(e) => setSun(Number(e.target.value))} />
-        <div className="hud-row">
-          <button className={tour ? "chip on" : "chip"} onClick={() => setTour(!tour)}>{tour ? "Stop tour" : "Auto tour"}</button>
-          <button className="chip" onClick={fullscreen}>Fullscreen</button>
-        </div>
-        <div className="hud-row">
-          <button className="chip" onClick={() => api.current?.snap()}>Save image</button>
-          <button className="chip" onClick={() => setHelp(!help)}>{help ? "Hide help" : "Help"}</button>
-        </div>
-      </div>
+      )}
+      {isTouch && <button className="hud-toggle-mobile" onClick={() => setPanelsOpen(!panelsOpen)}>{panelsOpen ? "Hide menu" : "Rooms & options"}</button>}
+      {panelsOpen && (
+        <>
+          <div className="hud hud-left">
+            <div className="seg">
+              <button className={mode === "orbit" ? "on" : ""} onClick={() => api.current?.setMode("orbit")}>Orbit</button>
+              <button className={mode === "walk" ? "on" : ""} onClick={() => api.current?.setMode("walk")}>Walk inside</button>
+            </div>
+            <div className="hud-title">Go to</div>
+            <div className="goto">
+              {spots.map((p) => (
+                <button key={p.name} className={mode === "walk" && loc.room === p.name ? "chip on" : "chip"} onClick={() => goToPlace(p)}>{p.name}</button>
+              ))}
+            </div>
+            <div className="hud-title" style={{ marginTop: 8 }}>Views</div>
+            {PRESETS.map((p) => (
+              <button key={p.name} className={mode === "orbit" && active === p.name ? "chip on" : "chip"} onClick={() => { setTour(false); pick(p); }} title={p.hint}>{p.name}</button>
+            ))}
+          </div>
+          <div className="hud hud-right">
+            <div className="hud-title">Show</div>
+            {([...(HOUSE.phase2 ? [["phase2", "Phase 2"]] : []), ["roof", "Roof & terrace"], ["furniture", "Furniture"], ...(FLOORS_TOTAL > 1 ? [["ghost", `Future floors (G+${FLOORS_TOTAL - 1})`]] : []),
+              ["labels", "Room labels (roof off)"], ["shadows", "Sun shadows"], ["noclip", "Walk through walls"]] as [keyof Toggles, string][]).map(([k, lab]) => (
+              <label key={k} className="tog"><input type="checkbox" checked={t[k]} onChange={() => tog(k)} />{lab}</label>
+            ))}
+            <div className="hud-title" style={{ marginTop: 10 }}>Sun · {hourLabel}</div>
+            <input type="range" min={6.5} max={17.5} step={0.25} value={sun} onChange={(e) => setSun(Number(e.target.value))} />
+            <div className="hud-row">
+              <button className={tour ? "chip on" : "chip"} onClick={() => setTour(!tour)}>{tour ? "Stop tour" : "Auto tour"}</button>
+              <button className="chip" onClick={fullscreen}>Fullscreen</button>
+            </div>
+            <div className="hud-row">
+              <button className="chip" onClick={() => api.current?.snap()}>Save image</button>
+              <button className="chip" onClick={() => setHelp(!help)}>{help ? "Hide help" : "Help"}</button>
+            </div>
+          </div>
+        </>
+      )}
       {help && (
         <div className="hud hud-help">
           {mode === "orbit" ? (
@@ -407,30 +586,57 @@ export function House3D() {
               <b>Orbit</b> · drag to turn · right-drag or arrow keys to pan · scroll zooms toward the cursor ·
               <b> double-click</b> anything to fly there · click the map to jump · <b>F</b> or “Walk inside” to walk
             </>
+          ) : isTouch ? (
+            <><b>Walk</b> · move with the thumbstick · drag the view to look · walk up the stairs to the roof · <b>Exit walk</b> for orbit</>
+          ) : locked ? (
+            <><b>Walk</b> · move the mouse to look · <b>W A S D</b> / arrows move · <b>Shift</b> runs · <b>Q E</b> turn · <b>Esc</b> frees the mouse · <b>F</b> back to orbit</>
           ) : (
             <>
-              <b>Walk</b> · <b>W A S D</b> move · <b>Q E</b> / ← → turn · drag to look · scroll steps forward · <b>Shift</b> runs ·
-              double-click a spot or click the map to jump · <b>F</b> back to orbit
+              <b>Walk</b> · <b>click the view</b> for mouse-look, or drag · <b>W A S D</b> / arrows move · <b>Shift</b> runs · <b>Q E</b> turn ·
+              walk up the stairs to the roof · double-click or click the map to jump · <b>Esc</b> / <b>F</b> back to orbit
             </>
           )}
         </div>
       )}
-      <div className="minimap">
-        <svg viewBox={`${mm.x0} ${-mm.y1} ${mm.x1 - mm.x0} ${mm.y1 - mm.y0}`} width={(mm.x1 - mm.x0) * mmK} height={(mm.y1 - mm.y0) * mmK} onClick={onMini}>
-          <rect x={PLOT.x0} y={-PLOT.y1} width={PLOT.x1 - PLOT.x0} height={PLOT.y1 - PLOT.y0} fill="#dfe9cf" stroke="#9a3412" strokeWidth={0.4} />
-          {MODEL.floors.map((f, i) => <rect key={i} x={f.x0} y={-f.y1} width={f.x1 - f.x0} height={f.y1 - f.y0} fill={f.kind === "bath" ? "#cfe0e8" : f.kind === "court" ? "#c9d8b4" : "#f4efe6"} />)}
-          {MODEL.walls.map((w, i) => <rect key={i} x={w.x0} y={-w.y1} width={w.x1 - w.x0} height={w.y1 - w.y0} fill="#555" />)}
+      <div className={`minimap${isTouch && mode === "walk" ? " minimap-touch-right" : ""}`}>
+        <div className="minimap-head">
+          <span>{roofMap ? "Roof plan" : "Ground plan"}</span>
+          <button className="mini-scope" onClick={() => setMiniScope(miniScope === "house" ? "plot" : "house")}>{miniScope === "house" ? "Whole plot" : "House"}</button>
+        </div>
+        <svg viewBox={`${mm.x0} ${-mm.y1} ${mm.x1 - mm.x0} ${mm.y1 - mm.y0}`} onClick={onMini}>
+          {R(PLOT, "#dfe9cf", { stroke: "#9a3412", strokeWidth: 0.4 })}
+          {R(SITE.path, "#e8e0d0")}
+          {roofMap ? (
+            <>
+              {HOUSE.roofs.filter((r) => t.phase2 || r.phase === 1).map(({ r }, i) => <g key={i}>{R(r, "#ece6dc")}</g>)}
+              {[...HOUSE.courts, ...STAIR_WELLS].map((r, i) => <g key={`h${i}`}>{R(r, "#b8d4e3", { stroke: "#4b7b94", strokeWidth: 0.3 })}</g>)}
+              {treads}
+              {HOUSE.tank && R(HOUSE.tank, "#3c4450")}
+              {roofEdges().filter((s) => (s.dependsOn2 ? !t.phase2 : s.phase === 1 || t.phase2)).map((s, i) => <g key={`p${i}`}>{R(parapetRect(s), "#4b5563")}</g>)}
+            </>
+          ) : (
+            <>
+              {HOUSE.porches.map((r, i) => <g key={`po${i}`}>{R(r, "#e3dccd")}</g>)}
+              {HOUSE.steps.map((s, i) => <g key={`st${i}`}>{R(s.r, "#d8cfbd")}</g>)}
+              {model.floors.map((f, i) => <g key={i}>{R(f, f.kind === "bath" || f.kind === "wash" ? "#cfe0e8" : f.kind === "court" ? "#c9d8b4" : "#f4efe6")}</g>)}
+              {treads}
+              {model.walls.map((w, i) => <g key={`w${i}`}>{R(w, "#4b5563")}</g>)}
+              {miniScope === "house" && model.labels.filter((lb) => lb.room).map((lb, i) => (
+                <text key={`l${i}`} x={lb.x} y={-lb.y + 1.1} fontSize={3} fontWeight={700} fill="#5f6b7a" textAnchor="middle" pointerEvents="none">{lb.room}</text>
+              ))}
+            </>
+          )}
           <g ref={marker}>
-            <path d="M0 0 L18 -9 L18 9 Z" fill="#2b7bb9" opacity={0.35} />
-            <circle r={3.2} fill="#2b7bb9" stroke="#fff" strokeWidth={1} />
+            <path d={`M0 0 L${16 * cone} ${-8 * cone} L${16 * cone} ${8 * cone} Z`} fill="#2b7bb9" opacity={0.35} />
+            <circle r={2.6 * cone} fill="#2b7bb9" stroke="#fff" strokeWidth={0.8 * cone} />
           </g>
         </svg>
         <div className="minimap-cap">click to jump · {mode === "walk" ? "you" : "camera"} in blue</div>
       </div>
-      {mode === "walk" && (
-        <div className="dpad">
-          <button {...hold("q")}>⟲</button><button {...hold("w")}>▲</button><button {...hold("e")}>⟳</button>
-          <button {...hold("a")}>◀</button><button {...hold("s")}>▼</button><button {...hold("d")}>▶</button>
+      {mode === "walk" && isTouch && (
+        <div ref={joyPadRef} className="joystick" {...joyHandlers} onPointerCancel={joyHandlers.onPointerUp} aria-label="Walk joystick">
+          <div className="joystick-ring" />
+          <div ref={joyKnobRef} className="joystick-knob" />
         </div>
       )}
       <div className="hud-note-floor">Ground floor FFL ±0 · terrace +{FLOOR}′ · plot limits shown as the compound wall · road on the {{ N: "north", S: "south", E: "east", W: "west" }[ROAD]}</div>

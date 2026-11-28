@@ -5,14 +5,13 @@
 import * as THREE from "three";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import {
-  BBOX, CHAJJA, COLUMNS, DogLeg, FLOOR, FLOORS_TOTAL, HOUSE, LINTEL, MODEL, MODEL_P1, MODEL_P2, PARAPET, PLINTH, PLOT, SITE, SLAB,
-  STAIRS, STAIR_RISE, STAIR_RISERS, STAIR_TREAD, STAIR_WELLS, roofEdges,
+  BBOX, CHAJJA, COLUMNS, COMPOUND, COURT_SINK, DogLeg, FLOOR, FLOORS_TOTAL, HOUSE, LINTEL, MODEL, MODEL_P1, MODEL_P2, PARAPET, PLINTH,
+  PLOT, SITE, SLAB, STAIRS, STAIR_RISE, STAIR_RISERS, STAIR_TREAD, STAIR_WELLS, STEP_TREADS, parapetRect, roofEdges, wallOpenings,
 } from "../model";
 import type { Model, Opening, Rect, Wall } from "../types";
 
 const H = FLOOR - SLAB; // wall height up to the slab soffit
 const FAN: [number, number] = [7.5, 8.75]; // fanlight / glass band
-const STEP_RISE = PLINTH / Math.max(1, Math.round(PLINTH / 0.55));
 
 const mat = (color: string, o: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0, ...o });
@@ -89,17 +88,6 @@ function rod(a: THREE.Vector3, b: THREE.Vector3, r: number, material: THREE.Mate
 const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, z, -y);
 
 // ---------------------------------------------------------------- walls with openings
-function wallOpenings(w: Wall, alongX: boolean, openings: Opening[]): Opening[] {
-  const tol = 0.02;
-  return openings.filter((o) => {
-    if ((o.axis === "x") !== alongX) return false;
-    const [t0, t1] = alongX ? [w.y0, w.y1] : [w.x0, w.x1];
-    const [a0, a1] = alongX ? [w.x0, w.x1] : [w.y0, w.y1];
-    const overlap = Math.min(t1, o.w[1]) - Math.max(t0, o.w[0]);
-    return overlap > (t1 - t0) * 0.5 - tol && o.a[0] >= a0 - tol && o.a[1] <= a1 + tol;
-  }).sort((p, q) => p.a[0] - q.a[0]);
-}
-
 function insert(g: THREE.Group, o: Opening, alongX: boolean, w: Wall) {
   const [t0, t1] = alongX ? [w.y0, w.y1] : [w.x0, w.x1];
   const mid = (t0 + t1) / 2;
@@ -195,14 +183,7 @@ function railings(g: THREE.Group, x0: number, x1: number, y0: number, y1: number
 function stair(g: THREE.Group, d: DogLeg) {
   const half = STAIR_RISERS / 2, zl = half * STAIR_RISE, T = STAIR_TREAD;
   const alongY = d.spec.axis === "y";
-  const bx = (c: [number, number], a0: number, a1: number, z0: number, z1: number) => (alongY ? box(c[0], c[1], a0, a1, z0, z1, M.coping) : box(a0, a1, c[0], c[1], z0, z1, M.coping));
-  for (let i = 0; i < half - 1; i++) {
-    g.add(bx(d.flight1, d.start + d.dir * i * T, d.start + d.dir * (i + 1) * T, d.spec.outside ? (i + 1) * STAIR_RISE - 0.75 : 0, (i + 1) * STAIR_RISE));
-    const top = zl + (i + 1) * STAIR_RISE;
-    g.add(bx(d.flight2, d.turn - d.dir * (i + 1) * T, d.turn - d.dir * i * T, top - 0.75, top));
-  }
-  const across: [number, number] = alongY ? [d.spec.x0, d.spec.x1] : [d.spec.y0, d.spec.y1];
-  g.add(bx(across, d.landing[0], d.landing[1], zl - 0.5, zl));
+  for (const { r, z, base } of d.treads) g.add(box(r.x0, r.x1, r.y0, r.y1, base, z, M.coping));
   // sloped waist slab under each flight, so the flights read as concrete, not floating treads
   const run = (half - 1) * T, rise = (half - 1) * STAIR_RISE, len = Math.hypot(run, rise), ang = Math.atan2(rise, run);
   for (const [c, a0, z0, dir] of [[d.flight1, d.start, 0, d.dir], [d.flight2, d.turn, zl, -d.dir]] as const) {
@@ -224,12 +205,8 @@ function stair(g: THREE.Group, d: DogLeg) {
     const outer1 = d.flight1[0] < d.flight2[0] ? d.flight1[0] + 0.1 : d.flight1[1] - 0.1;
     const outer2 = d.flight1[0] < d.flight2[0] ? d.flight2[1] - 0.1 : d.flight2[0] + 0.1;
     rails.push([outer1, d.start, 0, d.turn, zl], [outer2, d.turn, zl, d.start, FLOOR]);
-    const far = d.dir > 0 ? d.landing[1] : d.landing[0];
-    for (const c of [across[0] + 0.5, across[1] - 0.5]) {
-      const a = far - d.dir * 0.5;
-      g.add(alongY ? box(c - 0.5, c + 0.5, a - 0.5, a + 0.5, -PLINTH, zl - 0.5, M.column) : box(a - 0.5, a + 0.5, c - 0.5, c + 0.5, -PLINTH, zl - 0.5, M.column));
-    }
   }
+  for (const p of d.posts) g.add(box(p.x0, p.x1, p.y0, p.y1, -PLINTH, zl - 0.5, M.column));
   for (const [c, a0, z0, a1, z1] of rails) {
     g.add(rod(P(c, a0, z0 + 3), P(c, a1, z1 + 3), 0.05, M.rail));
     for (let k = 0; k <= 4; k++) { const a = a0 + ((a1 - a0) * k) / 4, z = z0 + ((z1 - z0) * k) / 4; g.add(rod(P(c, a, z), P(c, a, z + 3), 0.03, M.rail)); }
@@ -308,16 +285,7 @@ export function buildHouse(): HouseLayers {
   site.add(box(p.x0, p.x1, p.y0, p.y1, g0 - 0.02, g0 + 0.05, M.path, false));
   if (SITE.parking) { const k = SITE.parking; site.add(box(k.x0, k.x1, k.y0, k.y1, g0 - 0.02, g0 + 0.04, M.path, false)); }
   if (SITE.septic) { const k = SITE.septic; site.add(box(k.x0, k.x1, k.y0, k.y1, g0, g0 + 0.4, M.coping)); }
-  const bw = (x0: number, x1: number, y0: number, y1: number) => site.add(box(x0, x1, y0, y1, g0, g0 + 5, M.boundary));
-  const t = 0.75, [ga, gb] = SITE.gate;
-  const side = (s: typeof rd.side, a0: number, a1: number) => {
-    if (s === "N") bw(a0, a1, PLOT.y1, PLOT.y1 + t); else if (s === "S") bw(a0, a1, PLOT.y0 - t, PLOT.y0);
-    else if (s === "E") bw(PLOT.x1, PLOT.x1 + t, a0, a1); else bw(PLOT.x0 - t, PLOT.x0, a0, a1);
-  };
-  for (const s of ["N", "S", "E", "W"] as const) {
-    const [a0, a1] = s === "N" || s === "S" ? [PLOT.x0 - t, PLOT.x1 + t] : [PLOT.y0, PLOT.y1];
-    if (s === rd.side) { side(s, a0, ga); side(s, gb, a1); } else side(s, a0, a1);
-  }
+  for (const w of COMPOUND) site.add(box(w.x0, w.x1, w.y0, w.y1, g0, g0 + 5, M.boundary));
   for (const [x, y, r] of SITE.trees) tree(site, x, y, 4.5 * r + 4, r);
   for (const [x, y] of [[PLOT.x0 - 14, cy], [PLOT.x1 + 14, cy - 10], [cx, PLOT.y0 - 14]] as const) tree(site, x, y, 18, 5);
 
@@ -327,26 +295,20 @@ export function buildHouse(): HouseLayers {
     for (const { r } of HOUSE.roofs.filter((r) => r.phase === ph && !r.slabOnly)) {
       // the plinth stops short of the courts, whose paving sits 6″ lower
       for (const q of rectMinus(r, HOUSE.courts)) gHouse.add(box(q.x0, q.x1, q.y0, q.y1, g0, -0.06, M.stone));
-      for (const c of HOUSE.courts) if (ph === 1) gHouse.add(box(c.x0, c.x1, c.y0, c.y1, g0, -0.56, M.stone));
+      for (const c of HOUSE.courts) if (ph === 1) gHouse.add(box(c.x0, c.x1, c.y0, c.y1, g0, -COURT_SINK - 0.06, M.stone));
     }
-    for (const f of m.floors) gHouse.add(box(f.x0, f.x1, f.y0, f.y1, f.kind === "court" ? -0.56 : -0.06, f.kind === "court" ? -0.5 : 0, FLOOR_MAT[f.kind], false));
+    for (const f of m.floors) {
+      const top = f.kind === "court" ? -COURT_SINK : 0;
+      gHouse.add(box(f.x0, f.x1, f.y0, f.y1, top - 0.06, top, FLOOR_MAT[f.kind], false));
+    }
     for (const w of m.walls) buildWall(gHouse, w, MODEL.openings);
     for (const c of COLUMNS.filter((c) => c.phase2 === (ph === 2))) gHouse.add(box(c.x - 0.5, c.x + 0.5, c.y - 0.5, c.y + 0.5, 0, H, M.column));
     furnish(gFurn, m);
     for (const lb of m.labels) if (lb.room) (ph === 1 ? labels : Ls.p2Labels).add(label(lb.lines[0][0], lb.x, lb.y, 4.5));
   }
   for (const pr of HOUSE.porches) house.add(box(pr.x0, pr.x1, pr.y0, pr.y1, g0, 0, M.coping));
-  for (const st of HOUSE.steps) {
-    // treads step down from the porch (z 0) toward `down`; the last riser lands on the ground
-    const n = Math.round(PLINTH / STEP_RISE) - 1;
-    for (let k = 0; k < n; k++) {
-      const f = k / n, g = (k + 1) / n, r = st.r;
-      const [x0, x1, y0, y1] = st.down === "N" ? [r.x0, r.x1, r.y0 + f * (r.y1 - r.y0), r.y0 + g * (r.y1 - r.y0)]
-        : st.down === "S" ? [r.x0, r.x1, r.y1 - g * (r.y1 - r.y0), r.y1 - f * (r.y1 - r.y0)]
-        : st.down === "E" ? [r.x0 + f * (r.x1 - r.x0), r.x0 + g * (r.x1 - r.x0), r.y0, r.y1] : [r.x1 - g * (r.x1 - r.x0), r.x1 - f * (r.x1 - r.x0), r.y0, r.y1];
-      house.add(box(x0, x1, y0, y1, g0, -(k + 1) * STEP_RISE, M.coping));
-    }
-  }
+  // treads step down from the porch (z 0); the last riser lands on the ground
+  for (const { r, z } of STEP_TREADS) house.add(box(r.x0, r.x1, r.y0, r.y1, g0, z, M.coping));
   for (const c of HOUSE.canopies) house.add(box(c.x0, c.x1, c.y0, c.y1, LINTEL + 1.75, LINTEL + 2.2, M.coping));
   for (const d of STAIRS) stair(house, d);
   const ctr = (r: Rect): [number, number] => [(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2];
@@ -357,13 +319,10 @@ export function buildHouse(): HouseLayers {
     for (const q of rectMinus(r, [...HOUSE.courts, ...STAIR_WELLS])) (phase === 1 ? roof : Ls.p2Roof).add(box(q.x0, q.x1, q.y0, q.y1, H, FLOOR, M.slab));
   }
   for (const s of roofEdges()) {
-    const pt = 0.375, alongX = s.y0 === s.y1;
-    const inward = (alongX ? HOUSE.roofs.some(({ r }) => Math.abs(r.y0 - s.y0) < 0.05 && r.x0 <= s.x0 + 0.05 && r.x1 >= s.x1 - 0.05) : HOUSE.roofs.some(({ r }) => Math.abs(r.x0 - s.x0) < 0.05 && r.y0 <= s.y0 + 0.05 && r.y1 >= s.y1 - 0.05)) ? 1 : -1;
-    const [a, b] = inward > 0 ? [0, pt] : [-pt, 0];
+    const p = parapetRect(s), c = 0.08;
     const target = s.dependsOn2 ? Ls.p1Only : s.phase === 2 ? Ls.p2Roof : roof;
-    target.add(alongX ? box(s.x0, s.x1, s.y0 + a, s.y0 + b, FLOOR, FLOOR + PARAPET - 0.2, M.plaster) : box(s.x0 + a, s.x0 + b, s.y0, s.y1, FLOOR, FLOOR + PARAPET - 0.2, M.plaster));
-    target.add(alongX ? box(s.x0 - 0.08, s.x1 + 0.08, s.y0 + a - 0.08, s.y0 + b + 0.08, FLOOR + PARAPET - 0.2, FLOOR + PARAPET, M.coping)
-      : box(s.x0 + a - 0.08, s.x0 + b + 0.08, s.y0 - 0.08, s.y1 + 0.08, FLOOR + PARAPET - 0.2, FLOOR + PARAPET, M.coping));
+    target.add(box(p.x0, p.x1, p.y0, p.y1, FLOOR, FLOOR + PARAPET - 0.2, M.plaster));
+    target.add(box(p.x0 - c, p.x1 + c, p.y0 - c, p.y1 + c, FLOOR + PARAPET - 0.2, FLOOR + PARAPET, M.coping));
   }
   for (const c of HOUSE.courts) {
     railings(roof, c.x0, c.x1, c.y0 - 0.15, c.y0 - 0.05, FLOOR, FLOOR + PARAPET);
@@ -392,64 +351,4 @@ export function buildHouse(): HouseLayers {
     }
   }
   return Ls;
-}
-
-// ---------------------------------------------------------------- navigation data for walk mode
-const PASSABLE = new Set(["door", "open", "slide"]);
-const T_B = 0.75;
-
-/** Solid footprints a walker bumps into: walls minus doorways, columns, stairs, compound walls. */
-export function navBlocks(phase2: boolean): Rect[] {
-  const out: Rect[] = [];
-  const walls = phase2 ? MODEL.walls : MODEL_P1.walls;
-  for (const w of walls) {
-    const alongX = w.x1 - w.x0 >= w.y1 - w.y0;
-    const gaps = w.kind === "low" ? [] : wallOpenings(w, alongX, MODEL.openings).filter((o) => PASSABLE.has(o.kind));
-    let cur = alongX ? w.x0 : w.y0;
-    const end = alongX ? w.x1 : w.y1;
-    for (const o of gaps) {
-      if (o.a[0] > cur) out.push(alongX ? { x0: cur, x1: o.a[0], y0: w.y0, y1: w.y1 } : { x0: w.x0, x1: w.x1, y0: cur, y1: o.a[0] });
-      cur = Math.max(cur, o.a[1]);
-    }
-    if (end > cur) out.push(alongX ? { x0: cur, x1: end, y0: w.y0, y1: w.y1 } : { x0: w.x0, x1: w.x1, y0: cur, y1: end });
-  }
-  for (const c of COLUMNS) if (phase2 || !c.phase2) out.push({ x0: c.x - 0.5, x1: c.x + 0.5, y0: c.y - 0.5, y1: c.y + 0.5 });
-  for (const d of STAIRS) out.push(d.well);
-  const P = PLOT;
-  out.push({ x0: P.x0 - 1, x1: P.x1 + 1, y0: P.y1, y1: P.y1 + T_B }, { x0: P.x0 - 1, x1: P.x1 + 1, y0: P.y0 - T_B, y1: P.y0 },
-    { x0: P.x0 - T_B, x1: P.x0, y0: P.y0, y1: P.y1 }, { x0: P.x1, x1: P.x1 + T_B, y0: P.y0, y1: P.y1 });
-  return out;
-}
-
-/** Blocks on the terrace: parapets, court edges, the tank. */
-export function navBlocksRoof(): Rect[] {
-  const out: Rect[] = roofEdges().filter((s) => !s.dependsOn2).map((s) => ({ x0: s.x0 - 0.3, x1: s.x1 + 0.3, y0: s.y0 - 0.3, y1: s.y1 + 0.3 }));
-  for (const c of HOUSE.courts) out.push({ x0: c.x0 - 0.2, x1: c.x1 + 0.2, y0: c.y0 - 0.2, y1: c.y1 + 0.2 });
-  if (HOUSE.tank) out.push(HOUSE.tank);
-  return out;
-}
-
-const roofed = (x: number, y: number) => HOUSE.roofs.some(({ r }) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1);
-/** Floor level under a plan point: the plinth / porch (0), the ground (−plinth), or the terrace (level 1). */
-export function floorAt(x: number, y: number, level = 0) {
-  if (level === 1) return FLOOR;
-  return roofed(x, y) || HOUSE.porches.some((p) => x >= p.x0 && x <= p.x1 && y >= p.y0 && y <= p.y1) ? 0 : -PLINTH;
-}
-
-/** Named spots for "Go to": rooms from the model labels plus the design's extra places. */
-export interface Place { name: string; at: [number, number]; look: [number, number]; level?: number }
-export function places(): Place[] {
-  const list: Place[] = [];
-  for (const lb of MODEL.labels) {
-    if (!lb.room) continue;
-    const room = MODEL.floors.find((f) => f.kind !== "bath" && lb.x >= f.x0 && lb.x <= f.x1 && lb.y >= f.y0 && lb.y <= f.y1);
-    if (!room) continue;
-    const [cx, cy] = [(room.x0 + room.x1) / 2, (room.y0 + room.y1) / 2];
-    // stand near a corner, look across the room
-    list.push({ name: lb.lines[0][0].toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()), at: [room.x0 + 1.4, room.y0 + 1.4], look: [cx + (cx - room.x0), cy + (cy - room.y0)] });
-  }
-  list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  for (const [name, at, look] of HOUSE.places) list.push({ name, at, look });
-  list.push({ name: "Terrace (walk on roof)", at: [BBOX.x0 + 3, BBOX.y0 + 3], look: [BBOX.x1, BBOX.y1], level: 1 });
-  return list;
 }

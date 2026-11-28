@@ -3,7 +3,7 @@ name: house-concept
 description: >-
   Turns a family's brief for a house (a sketch, a photo, a plot size, a list
   of rooms) into a concept design app: a dimensioned ground-floor plan, a 3D
-  model you can orbit and walk through, four elevations, sections, a site plan,
+  model you can orbit and walk through, up the stairs and onto the roof, four elevations, sections, a site plan,
   a structural grid brief, area and cost notes, and earlier options kept for
   comparison, all generated from one design file and bundled into a single
   HTML file. Asks only the few questions that change the geometry, then builds
@@ -82,7 +82,10 @@ See `references/architecture.md` for the code map and `references/design-rules.m
 
 - the plan: labels clear of furniture and door swings, dimensions closing, nothing outside the sheet
   (`scripts/check-sheets.js` finds text that runs off a sheet);
-- the 3D: front, aerial and roof-off views, at least one walk-through spot, the phase-2 toggle, no console errors;
+- the 3D: front, aerial and roof-off views, the phase-2 toggle, no console errors. Walk it with real key presses:
+  through the main door and a room door, up every stair to the terrace, into a parapet and a court or slab edge
+  (they must stop you), and back down, with phase 2 on and off. Automation can't grant pointer lock, so mouse-look and
+  the touch joystick go under "not verified" unless the user tries them;
 - elevations and sections: openings where the plan has them, the stair and any court drawn the right way round.
 
 Fix what you find before reporting. Report what you verified in the browser, what only type-checked, and what you

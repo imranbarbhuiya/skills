@@ -44,7 +44,7 @@ npx skills add https://github.com/imranbarbhuiya/skills
 npx skills add https://github.com/imranbarbhuiya/skills/tree/main/skills/unslop
 ```
 
-`unslop` and `blast-radius` are available for the agent to apply on its own: `unslop` while it writes and edits application code, `blast-radius` when you ask whether a change is safe and before it pushes a change to shared code, contracts, schemas, config or dependencies. `house-concept` runs when you ask to design or lay out a house, or invoke `/house-concept`. `grill-to-plan` is explicit-only (`disable-model-invocation: true`); invoke it by name.
+`unslop` and `blast-radius` are available for the agent to apply on its own: `unslop` while it writes and edits application code, `blast-radius` when you ask whether a change is safe and before it pushes a change to shared code, contracts, schemas, config or dependencies. `house-concept` and `grill-to-plan` are explicit-only (`disable-model-invocation: true`); invoke them by name.
 
 ## unslop
 
@@ -105,7 +105,7 @@ Inspired by the [`blast-radius`](https://github.com/cursor/plugins/blob/main/pst
 
 ![house-concept: plan, 3D, roof-off view and elevation of the example courtyard house](skills/house-concept/examples/courtyard-house/tweet.png)
 
-Reads the brief and any sketch first, asks only what changes the geometry (plot and road side, rooms and baths, floors now and later, phasing, must-keeps), defaults the rest and lists the defaults, then builds from a working starter app. Every view comes from one design file, so moving a stair updates the plan, 3D, elevations, sections, site and structure together. Earlier layouts stay on an "Earlier options" tab for comparison.
+Reads the brief and any sketch first, asks only what changes the geometry (plot and road side, rooms and baths, floors now and later, phasing, must-keeps), defaults the rest and lists the defaults, then builds from a working starter app. Invoke it explicitly: `/house-concept`. Every view comes from one design file, so moving a stair updates the plan, 3D, elevations, sections, site and structure together. Earlier layouts stay on an "Earlier options" tab for comparison.
 
 The output is a Vite + React + three.js project and one self-contained `dist/index.html` you can send to the family. It is a concept only: every sheet carries a disclaimer that a licensed architect and structural engineer do the final design, and the structure sheet is a brief for the engineer, not a design.
 

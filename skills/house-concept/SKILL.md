@@ -3,14 +3,14 @@ name: house-concept
 description: >-
   Turns a family's brief for a house (a sketch, a photo, a plot size, a list
   of rooms) into a concept design app: a dimensioned ground-floor plan, a 3D
-  model you can orbit and walk through, up the stairs and onto the roof, four elevations, sections, a site plan,
-  a structural grid brief, area and cost notes, and earlier options kept for
-  comparison, all generated from one design file and bundled into a single
-  HTML file. Asks only the few questions that change the geometry, then builds
-  from a working starter app. Use when the user asks to design, plan or lay out
-  a house or home, turn a hand sketch into drawings, compare layouts, or see a
-  house in 3D before talking to an architect. Concept only: every sheet says a
-  licensed architect and structural engineer do the final design.
+  model you can orbit and walk through, up the stairs and onto the roof, four
+  elevations, sections, a site plan, a structural grid brief, area and cost
+  notes, and earlier options kept for comparison, all generated from one design
+  file and bundled into a single HTML file. Asks only the few questions that
+  change the geometry, then builds from a working starter app. Concept only:
+  every sheet says a licensed architect and structural engineer do the final
+  design. Invoke with /house-concept.
+disable-model-invocation: true
 ---
 
 # House concept
